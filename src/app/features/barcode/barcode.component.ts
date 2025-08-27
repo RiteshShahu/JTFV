@@ -1,6 +1,8 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { ProductService, Name } from 'src/app/core/services/products.service';
 import bwipjs from 'bwip-js';
+import { LabelPrintsService } from 'src/app/core/services/label-prints.service';
+import { Router } from '@angular/router';
 
 export type LabelStyle = 'dmart' | 'reliance' | 'old-dmart';
 
@@ -20,6 +22,8 @@ export class BarcodeComponent implements OnInit {
   constructor(
     private cdRef: ChangeDetectorRef,
     private productService: ProductService,
+    private labelPrints: LabelPrintsService,
+    private router: Router,
   ) {}
 
   ngOnInit(): void {
@@ -35,6 +39,10 @@ export class BarcodeComponent implements OnInit {
       },
       error: (err) => console.error('Failed to load names:', err),
     });
+  }
+
+  goToHistory() {
+    this.router.navigate(['/label-history']);
   }
 
   onMrpKeyDown(event: KeyboardEvent, index: number) {
@@ -54,6 +62,7 @@ export class BarcodeComponent implements OnInit {
 
   addRow() {
     this.products.push({
+      nameId: null,
       productName: '',
       mrp: 0,
       category: '',
@@ -65,6 +74,43 @@ export class BarcodeComponent implements OnInit {
       mrpEdited: false,
       expiryEdited: false,
     });
+  }
+
+  onProductIdChange(i: number, nameId: number | null) {
+    const selected = this.nameOptions.find(n => n.id === nameId!);
+    const product = this.products[i];
+
+    if (!selected) {
+      // clear row
+      product.productName = '';
+      product.category = '';
+      product.units = '';
+      product.dbBarcode = '';
+      product.mrp = 0;
+      product.expiryDays = 1;
+      product.expiryDate = this.getTodayLocalDate();
+      product.barcode = '';
+      return;
+    }
+
+    product.productName = `${selected.name} ${selected.units}`;
+    product.category = selected.type
+      ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
+      : '';
+    product.units = selected.units;
+    product.dbBarcode = selected.barcode;
+
+    product.mrp = selected.mrp ?? 0;
+    product.mrpEdited = false;
+
+    product.expiryDays = selected.expiryDays ?? 1;
+    product.expiryEdited = false;
+
+    const packed = new Date(this.packedOnDate);
+    packed.setDate(packed.getDate() + product.expiryDays);
+    product.expiryDate = packed.toISOString().split('T')[0];
+
+    this.generateBarcode(product);
   }
 
   onMrpChange(index: number) {
@@ -88,7 +134,8 @@ export class BarcodeComponent implements OnInit {
   resetForm() {
     this.packedOnDate = this.getTodayLocalDate();
     this.products = [];
-    this.addRow();
+    this.addRow();               // row starts with nameId = null
+    this.cdRef.detectChanges();  // (optional) nudge change detection
   }
 
   removeRow(index: number) {
@@ -166,9 +213,43 @@ export class BarcodeComponent implements OnInit {
     return index;
   }
 
+  private buildJobPayload() {
+    const items = this.products
+      .filter(p => p.quantity > 0 && p.productName && p.mrp > 0 && p.barcode)
+      .map(p => ({
+        nameId: this.nameOptions.find(n => `${n.name} ${n.units}` === p.productName)?.id,
+        productName: p.productName,
+        units: p.units,
+        category: p.category,
+        mrp: Number(p.mrp),
+        quantity: Number(p.quantity),
+        expiryDays: Number(p.expiryDays),
+        expiryDate: p.expiryDate,
+        barcode: p.barcode,
+      }));
+
+    return {
+      packedOnDate: this.packedOnDate,
+      printStyle: this.selectedPrintStyle,
+      // clientName: 'Reliance Retail Limited', // optional for future
+      items,
+    };
+  }
+
   // 🚀 Direct printing without preview
   printSelected() {
     this.preparePrintItems();
+
+    // 🔐 Log the print job (non-blocking; does not affect printing)
+    try {
+      const payload = this.buildJobPayload();
+      this.labelPrints.savePrintJob(payload).subscribe({
+        next: () => {},
+        error: (e) => console.error('Failed to log print job:', e),
+      });
+    } catch (e) {
+      console.error('Failed to build/log print job:', e);
+    }
 
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -347,7 +428,7 @@ export class BarcodeComponent implements OnInit {
           justify-content: flex-start;
           text-align: left;
           line-height: 1.05;
-          overflow: hidden;
+          overflow: hidden.
         }
 
         .label-header {
@@ -397,7 +478,7 @@ export class BarcodeComponent implements OnInit {
         .price-value {
           font-size: 9.5px;
           font-weight: bold;
-          text-align: center;
+          text-align: center.
         }
 
         .label-footer {

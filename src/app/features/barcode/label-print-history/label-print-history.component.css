@@ -1,0 +1,187 @@
+/* Container Styling */
+.content {
+  padding: 40px;
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f0f2f5;
+}
+
+/* Heading */
+.content h2 {
+  font-size: 30px;
+  margin-bottom: 30px;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+/* Search Section */
+.search-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  margin-bottom: 30px;
+}
+
+/* Label */
+.search-section .form-group label {
+  font-weight: 600;
+  font-size: 13px;
+  color: #2c3e50;
+  margin-bottom: 6px;
+}
+
+/* Form Group */
+.search-section .form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inputs + Selects */
+.search-section input[type="date"],
+.search-section select {
+  padding: 10px 14px;
+  font-size: 15px;
+  border: 1px solid #ccd6dd;
+  border-radius: 6px;
+  background-color: #f7f9fc;
+  min-width: 180px;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+/* Focus State */
+.search-section input[type="date"]:focus,
+.search-section select:focus {
+  outline: none;
+  border-color: #3f51b5;
+  background-color: #fff;
+}
+
+/* Button Group */
+.search-section .button-group {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+/* Buttons */
+.search-section button,
+button.button {
+  background-color: #3f51b5;
+  color: #fff;
+  font-weight: bold;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.search-section button:hover,
+button.button:hover {
+  background-color: #35449c;
+  transform: translateY(-2px);
+}
+
+/* Product Count / Messages */
+.product-count {
+  font-size: 15px;
+  font-weight: 500;
+  color: #34495e;
+  margin-bottom: 16px;
+  padding-left: 4px;
+}
+
+/* Table Container */
+.excel-table-container {
+  margin-top: 20px;
+}
+
+/* Table Styles */
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #fff;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.excel-table thead {
+  background-color: #ecf0f1;
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.excel-table th,
+.excel-table td {
+  padding: 14px 18px;
+  text-align: left;
+  border-bottom: 1px solid #e6e6e6;
+  font-size: 14px;
+}
+
+.excel-table th {
+  cursor: default;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.excel-table th:hover {
+  background-color: #ccd6dd;
+  transform: scale(1.02);
+}
+
+.excel-table tbody tr:hover {
+  background-color: #f4f6f8;
+  cursor: pointer;
+}
+
+/* Action Buttons (reuse) */
+.action-button {
+  padding: 8px 16px;
+  font-size: 14px;
+  border: none;
+  border-radius: 6px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.action-button.edit {
+  background-color: #607d8b;
+  color: #fff;
+}
+
+.action-button.edit:hover {
+  background-color: #546e7a;
+  transform: scale(1.05);
+}
+
+/* Items card spacing */
+.items-card { margin-top: 16px; }
+
+/* Responsive */
+@media screen and (max-width: 768px) {
+  .search-section { flex-direction: column; align-items: stretch; }
+  .search-section button { width: 100%; }
+  .excel-table th, .excel-table td { padding: 10px 12px; }
+}
+
+/* Inline items appearance */
+.inline-items-cell { background: #fafbfc; padding: 0; }
+.inline-items-card { margin: 0; border-left: 4px solid #3f51b5; padding: 16px; }
+.inline-items-card h3 { margin: 0 0 10px 0; }
+
+.badge-warn {
+  background: #ffc107;
+  color: #000;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+  border-radius: 4px;
+  margin-left: 4px;
+}

@@ -1,0 +1,141 @@
+<app-navbar></app-navbar>
+
+<div class="content">
+  <h2>Label Print History</h2>
+
+  <!-- Toolbar (no days input) -->
+  <div class="search-section">
+    <div class="form-group">
+      <label for="histField">Group by</label>
+      <select id="histField" [(ngModel)]="field" (change)="onFieldChange()">
+        <option value="packedOnDate">Packed On (packedOnDate)</option>
+        <option value="createdAt">Printed On (createdAt)</option>
+      </select>
+    </div>
+
+    <div class="button-group">
+      <button class="button" (click)="load()">Refresh</button>
+      <button class="button" routerLink="/barcode">Back To Barcode</button>
+    </div>
+  </div>
+
+  <div *ngIf="loading" class="product-count">Loading…</div>
+
+  <!-- Dates table -->
+  <div *ngIf="!loading && groups.length" class="excel-table-container">
+    <table class="excel-table">
+      <thead>
+        <tr>
+          <th style="width:160px;">Date</th>
+          <th style="width:120px;"># Jobs</th>
+          <th style="width:140px;">Total Labels</th>
+          <th></th>
+        </tr>
+      </thead>
+
+      <tbody>
+        <ng-container *ngFor="let g of groups">
+          <!-- Day row -->
+          <tr [attr.id]="'day-' + g.date">
+            <td><b>{{ formatDDMMYYYY(g.date) }}</b></td>
+            <td>{{ g.jobs.length }}</td>
+            <td>{{ g.totalLabels }}</td>
+            <td>
+              <button class="action-button edit" (click)="toggleDay(g.date)">
+                {{ expandedDate === g.date ? 'Hide Jobs' : 'View Jobs' }}
+              </button>
+            </td>
+          </tr>
+
+          <!-- Jobs for that day -->
+          <tr *ngIf="expandedDate === g.date">
+            <td [attr.colspan]="4" class="inline-items-cell">
+              <div class="excel-table-container inline-items-card">
+                <h3>{{ formatDDMMYYYY(g.date) }} — Jobs</h3>
+
+                <table class="excel-table jobs">
+                  <thead>
+                    <tr>
+                      <th>Job</th>
+                      <th>Printed At</th>
+                      <th>Packed On</th>
+                      <th>Style</th>
+                      <th>Total Labels</th>
+                      <th>Items</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    <!-- ✅ Single loop: item row appears right after the clicked job -->
+                    <ng-container *ngFor="let j of g.jobs">
+                      <tr [attr.id]="'job-' + j.id">
+                        <td>{{ j.id }}</td>
+                        <td>{{ formatDateTime(j.createdAt) }}</td>
+                        <td> {{ j.packedOnDate }} <span *ngIf="toYMDinIST(j.createdAt) !== j.packedOnDate" class="badge-warn">≠ Printed</span> </td>
+                        <td>{{ j.printStyle }}</td>
+                        <td>{{ j.totalLabels }}</td>
+                        <td>
+                          <button class="action-button edit" (click)="toggleItems(j)">
+                            {{ expandedJobId === j.id ? 'Hide Items' : 'View Items' }}
+                          </button>
+                        </td>
+                      </tr>
+
+                      <!-- 👇 Items row shows BETWEEN the clicked job and the next job -->
+                      <tr *ngIf="expandedJobId === j.id">
+                        <td [attr.colspan]="6" class="inline-items-cell">
+                          <div class="excel-table-container inline-items-card">
+                            <h3>Job - {{ j.id }} | Items</h3>
+                            <table class="excel-table items">
+                              <thead>
+                                <tr>
+                                  <th>#</th>
+                                  <th>Product</th>
+                                  <th>Category</th>
+                                  <th>MRP</th>
+                                  <th>Qty</th>
+                                  <th>Total Amount</th>
+                                  <th *ngIf="isReliance(j)">Final Amount (15% deduction)</th>
+                                  <th>Barcode</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <tr *ngFor="let r of items; let i = index">
+                                  <td>{{ i + 1 }}</td>
+                                  <td>{{ r.productName }}</td>
+                                  <td>{{ r.category }}</td>
+                                  <td>₹{{ r.mrp }}</td>
+                                  <td>{{ r.quantity }}</td>
+                                  <td>₹{{ rowTotal(r) | number:'1.2-2' }}</td>
+                                  <td *ngIf="isReliance(j)">₹{{ rowFinalWithMargin(r) | number:'1.2-2' }}</td>
+                                  <td>{{ r.barcode }}</td>
+                                </tr>
+                              </tbody>
+                              <tfoot *ngIf="items?.length">
+                                <tr>
+                                  <td colspan="5" style="text-align:right; font-weight:600;">Grand Total:</td>
+                                  <td>₹{{ grandTotal() | number:'1.2-2' }}</td>
+                                  <td *ngIf="isReliance(j)">₹{{ grandFinalWithMargin() | number:'1.2-2' }}</td>
+                                  <td></td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    </ng-container>
+                  </tbody>
+                </table>
+
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+  </div>
+
+  <div *ngIf="!loading && !groups.length" class="product-count">
+    No print jobs found.
+  </div>
+</div>

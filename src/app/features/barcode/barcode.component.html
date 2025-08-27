@@ -37,9 +37,9 @@
       <tbody>
         <tr *ngFor="let item of products; let i = index; trackBy: trackByIndex">
           <td>
-            <select class="form-control" name="productName{{i}}" (change)="onProductSelect(i, $event)">
-              <option value="">Select Product</option>
-              <option *ngFor="let option of filteredNameOptions" [value]="option.id">
+            <select class="form-control" name="productName{{i}}" [(ngModel)]="item.nameId" (ngModelChange)="onProductIdChange(i, $event)" >
+              <option [ngValue]="null">Select Product</option>
+              <option *ngFor="let option of filteredNameOptions" [ngValue]="option.id">
                 {{ option.name }} {{ option.units }}
               </option>
             </select>
@@ -75,6 +75,7 @@
       <button type="button" class="btn btn-outline-primary add-btn" (click)="addRow()">Add Row</button>
       <button type="button" class="btn btn-warning" (click)="resetForm()">Refresh</button>
       <button type="button" class="btn btn-primary" (click)="printSelected()">Print</button>
+      <button type="button" class="btn btn-success view-history-btn" (click)="goToHistory()">View History</button>
     </div>
   </form>
 </div>

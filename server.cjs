@@ -123,17 +123,43 @@ db.run(`
     )
   `);
 
+  // Enable FK so items delete with job
+  db.run(`PRAGMA foreign_keys = ON`);
+
+  // Print history: headers
   db.run(`
-    CREATE TABLE IF NOT EXISTS barcodes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, 
-    productName TEXT, 
-    mrp REAL,
-    category TEXT,
-    expiryDays INTEGER, 
-    expiryDate TEXT, 
-    barcode TEXT
+    CREATE TABLE IF NOT EXISTS print_jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      createdAt TEXT NOT NULL,        -- ISO timestamp
+      packedOnDate TEXT NOT NULL,     -- YYYY-MM-DD (your input)
+      printStyle TEXT NOT NULL,       -- 'reliance' | 'dmart' | 'old-dmart'
+      clientName TEXT,                -- optional (kept for future)
+      totalLabels INTEGER NOT NULL
     )
-    `);
+  `);
+
+  // Print history: items
+  db.run(`
+    CREATE TABLE IF NOT EXISTS print_job_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      jobId INTEGER NOT NULL,
+      nameId INTEGER,                 -- link to names.id if known
+      productName TEXT NOT NULL,      -- frozen label text
+      units TEXT,
+      category TEXT,
+      mrp REAL NOT NULL,
+      quantity INTEGER NOT NULL,      -- qty per product line
+      expiryDays INTEGER NOT NULL,
+      expiryDate TEXT NOT NULL,       -- YYYY-MM-DD
+      packedOnDate TEXT NOT NULL,     -- duplicate for convenience
+      barcode TEXT NOT NULL,
+      FOREIGN KEY (jobId) REFERENCES print_jobs(id) ON DELETE CASCADE
+    )
+  `);
+
+  db.run(`CREATE INDEX IF NOT EXISTS idx_print_jobs_createdAt ON print_jobs(createdAt)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_print_job_items_jobId ON print_job_items(jobId)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_print_job_items_barcode ON print_job_items(barcode)`);
 
 });
 
@@ -414,21 +440,113 @@ app.delete('/api/bills/:billNumber', (req, res) => {
 });
 
 // ==================== BARCODE ROUTES ====================
-app.post('/api/barcodes', (req, res) => {
-  const items = req.body;
-  if (!Array.isArray(items)) return res.status(400).json({ message: 'Expected array of barcodes' });
+// Save one print job + its items
+// enable FKs once
+db.run(`PRAGMA foreign_keys = ON`);
 
-  const stmt = db.prepare(`INSERT INTO barcodes (productName, mrp, category, expiryDays, expiryDate, barcode) VALUES (?, ?, ?, ?, ?, ?)`);
-  db.serialize(() => {
-    items.forEach(p => {
-      if (!p.productName || !p.mrp || !p.barcode) return;
-      stmt.run(p.productName, p.mrp, p.category, p.expiryDays, p.expiryDate, p.barcode);
-    });
-    stmt.finalize(err => {
-      if (err) return res.status(500).json({ message: 'Finalize error', error: err.message });
-      res.status(201).json({ message: 'Barcodes saved' });
-    });
-  });
+app.post('/api/label-prints', (req, res) => {
+  const { packedOnDate, printStyle, clientName, items } = req.body || {};
+  if (!packedOnDate || !printStyle || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: 'Invalid payload' });
+  }
+
+  const createdAt = new Date().toISOString();
+  const totalLabels = items.reduce((s, it) => s + (Number(it.quantity) || 0), 0);
+
+  db.run(
+    `INSERT INTO print_jobs (createdAt, packedOnDate, printStyle, clientName, totalLabels)
+     VALUES (?, ?, ?, ?, ?)`,
+    [createdAt, packedOnDate, printStyle, clientName || null, totalLabels],
+    function (err) {
+      if (err) return res.status(500).json({ message: 'Failed to create job' });
+
+      const jobId = this.lastID;
+      const stmt = db.prepare(
+        `INSERT INTO print_job_items
+         (jobId, nameId, productName, units, category, mrp, quantity, expiryDays, expiryDate, packedOnDate, barcode)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+
+      try {
+        items.forEach(it => {
+          stmt.run([
+            jobId,
+            it.nameId ?? null,
+            it.productName,
+            it.units ?? null,
+            it.category ?? null,
+            Number(it.mrp),
+            Number(it.quantity),
+            Number(it.expiryDays),
+            it.expiryDate,
+            packedOnDate,
+            it.barcode,
+          ]);
+        });
+      } catch (e) {
+        console.error('❌ Insert items failed:', e);
+        return res.status(500).json({ message: 'Failed to insert items' });
+      } finally {
+        stmt.finalize();
+      }
+
+      res.status(201).json({ jobId, createdAt, totalLabels });
+    }
+  );
+});
+
+app.get('/api/label-prints', (req, res) => {
+  const days = Math.max(1, Number(req.query.days) || 15);
+  db.all(
+    `SELECT * FROM print_jobs
+     WHERE datetime(createdAt) >= datetime('now', ?)
+     ORDER BY datetime(createdAt) DESC`,
+    [`-${days} days`],
+    (err, rows) => err ? res.status(500).json({ message: 'Query failed' }) : res.json(rows)
+  );
+});
+
+app.get('/api/label-prints/:jobId/items', (req, res) => {
+  db.all(
+    `SELECT * FROM print_job_items WHERE jobId = ? ORDER BY id ASC`,
+    [req.params.jobId],
+    (err, rows) => err ? res.status(500).json({ message: 'Query failed' }) : res.json(rows)
+  );
+});
+
+app.get('/api/label-prints/by-date', (req, res) => {
+  const date = (req.query.date || '').toString();
+  const field = req.query.field === 'packedOnDate' ? 'packedOnDate' : 'createdAt';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
+  }
+
+  const where =
+    field === 'createdAt'
+      ? `date(createdAt) = date(?)`     // createdAt is ISO; wrap with date()
+      : `packedOnDate = ?`;             // packedOnDate already YYYY-MM-DD
+
+  db.all(
+    `SELECT * FROM print_jobs
+     WHERE ${where}
+     ORDER BY datetime(createdAt) DESC`,
+    [date],
+    (err, rows) => {
+      if (err) return res.status(500).json({ message: 'Query failed' });
+      res.json(rows);
+    }
+  );
+});
+
+// ✅ Add this route near other /api/label-prints routes
+app.get('/api/label-prints/all', (req, res) => {
+  db.all(
+    `SELECT * FROM print_jobs ORDER BY datetime(createdAt) DESC`,
+    [],
+    (err, rows) => err
+      ? res.status(500).json({ message: 'Query failed' })
+      : res.json(rows)
+  );
 });
 
 // ==================== AUTH ROUTES ====================

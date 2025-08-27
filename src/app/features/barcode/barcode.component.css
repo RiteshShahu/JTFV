@@ -136,6 +136,20 @@ select.form-control:focus {
   background-color: #44bc56;
 }
 
+.btn-success {
+  background-color: #607d8b;
+  color: #ffffff;
+}
+
+.btn-success:hover {
+  background-color: #607d8b;
+}
+
+/* Push View History to the far right */
+.view-history-btn {
+  margin-left: auto;
+}
+
 /* Wider Product column */
 .col-product {
   width: 24%;
