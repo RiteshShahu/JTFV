@@ -445,15 +445,18 @@ export class EditRelianceBillsComponent implements OnInit {
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    const confirmed = confirm("Are you sure you want to print this bill?");
-    if (!confirmed) return;
+    // Flush focused control so ngModel has latest values (prevents stale amounts)
+    try {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+    } catch {}
 
     this.isPrinting = true;
 
     try {
       this.ensureRelianceDefaults();
 
-      // Normalize rows (same as before)
+      // Normalize rows
       const validItems = this.billItems
         .filter(it => it.productId !== null)
         .map(it => {
@@ -469,7 +472,7 @@ export class EditRelianceBillsComponent implements OnInit {
         });
 
       if (!validItems.length) {
-        alert('No valid items to print.');
+        console.warn('No valid items to print.');
         return;
       }
 
@@ -478,21 +481,21 @@ export class EditRelianceBillsComponent implements OnInit {
       this.totalAmount   = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
       this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
 
-      // NEW: clamp copies (1..50)
+      // Clamp copies (1..50)
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
-      // NEW: multi-copy HTML (N pages)
+      // Build multi-copy HTML (N pages in one job)
       const html = this.buildPrintHtmlMulti(validItems, copies);
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        // Pass copies to Electron (if your main handler supports it)
+        // Electron route (preferred)
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          alert('Print failed: ' + (res?.error || 'Unknown error'));
+          // (Optional) show a non-blocking toast/snackbar in your UI here
         }
       } else {
         // Browser fallback: HTML already contains N pages
@@ -500,9 +503,18 @@ export class EditRelianceBillsComponent implements OnInit {
       }
     } catch (err) {
       console.error('Print failed:', err);
-      alert('Print failed. Please check the printer connection.');
+      // (Optional) show a non-blocking toast/snackbar in your UI here
     } finally {
       this.isPrinting = false;
+
+      // Gentle refocus to avoid input/keyboard freeze after driver dialog
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+        try { window.focus(); } catch {}
+      }, 40);
+
+      // Ask main process for a single soft nudge (no minimize/restore loops)
+      try { await (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
     
@@ -658,7 +670,7 @@ export class EditRelianceBillsComponent implements OnInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-      alert('Unable to create print frame.');
+      console.warn('Unable to create print frame.');
       return;
     }
 

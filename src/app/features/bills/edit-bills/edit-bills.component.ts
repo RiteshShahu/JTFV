@@ -210,8 +210,8 @@ export class EditBillsComponent implements OnInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-      alert('Unable to create print frame.');
-      return;
+    console.warn('Unable to create print frame.');
+    return;
     }
 
     doc.open();
@@ -330,8 +330,11 @@ export class EditBillsComponent implements OnInit {
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    const confirmed = confirm('Are you sure you want to print this bill?');
-    if (!confirmed) return;
+    // optional: flush ngModel
+    try {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+    } catch {}
 
     this.isPrinting = true;
 
@@ -349,17 +352,15 @@ export class EditBillsComponent implements OnInit {
         }));
 
       if (validItems.length === 0) {
-        alert('No valid items to print. Please check quantity and price fields.');
+        console.warn('No valid items to print. Please check quantity and price fields.');
         return;
       }
 
       const totalAmount = validItems.reduce((acc, it) => acc + (it.quantity || 0) * (it.price || 0), 0);
       const finalAmount = totalAmount - totalAmount * (this.discount / 100);
 
-      // NEW: clamp copies (1..50)
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
-      // NEW: build HTML with N pages (one per copy)
       const html = this.buildPrintHtmlMulti(validItems, {
         clientName: this.clientName,
         address: this.address,
@@ -374,21 +375,26 @@ export class EditBillsComponent implements OnInit {
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        // Pass copies to Electron if your main handler supports it
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          alert('Print failed: ' + (res?.error || 'Unknown error'));
+          // show non-blocking toast if desired
         }
       } else {
-        // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
       }
     } catch (err: any) {
       console.error('Print failed:', err);
-      alert('Print failed. ' + (err?.message || 'Please check the printer connection.'));
+      // show non-blocking toast if desired
     } finally {
       this.isPrinting = false;
+
+      // gentle refocus
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+        try { window.focus(); } catch {}
+      }, 40);
+      try { await (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
 

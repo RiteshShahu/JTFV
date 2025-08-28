@@ -53,12 +53,11 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       this.discount = bill.discount; // percent
       this.billDate = bill.billDate;
 
-      // Use saved discountAmount if available; otherwise derive it
+      // Prefer saved values; fallback to recompute
       this.marginValue = (typeof bill.discountAmount === 'number')
         ? bill.discountAmount
         : ((bill.totalAmount || 0) * (bill.discount || 0)) / 100;
 
-      // Prefer saved finalAmount; otherwise derive it from amount - marginValue
       this.finalAmount = (typeof bill.finalAmount === 'number')
         ? bill.finalAmount
         : (this.amount || 0) - (this.marginValue || 0);
@@ -66,16 +65,14 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       const matchingClient = this.clients.find(c => c.firstName === bill.clientName);
       if (matchingClient) this.selectedClient = matchingClient;
 
-      // Trigger resize after address is loaded
+      // Resize after address set
       setTimeout(() => this.autoResize(), 0);
 
-      // Only recompute if there was no saved discountAmount
       if (bill.discountAmount == null) this.calculateFinalAmount();
     });
   }
 
   ngAfterViewInit(): void {
-    // Trigger resize after view has been initialized
     setTimeout(() => this.autoResize(), 0);
   }
 
@@ -89,10 +86,8 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
   }
 
   calculateFinalAmount() {
-    if (!this.amount) { this.finalAmount = 0; this.marginValue = 0;
-      return;
-    }
-
+    if (!this.amount && this.amount !== 0) return;
+    if (!this.amount) { this.finalAmount = 0; this.marginValue = 0; return; }
     this.marginValue = (this.amount * this.discount) / 100;
     this.finalAmount = this.amount - this.marginValue;
   }
@@ -104,7 +99,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       billNumber: this.billNumber,
       billDate: this.billDate,
       discount: this.discount,            // percent (e.g., 15)
-      discountAmount: this.marginValue,   // ← NEW: numeric value (e.g., 185.10)
+      discountAmount: this.marginValue,   // numeric value (e.g., 185.10)
       totalAmount: this.amount,
       finalAmount: this.finalAmount,
       description: this.description,
@@ -118,29 +113,28 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
     });
   }
 
+  // --- PRINT: non-modal + gentle refocus ---
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
-
-    const confirmed = confirm("Are you sure you want to print this bill?");
-    if (!confirmed) return;
-
     this.isPrinting = true;
 
     try {
+      // ensure blur so ngModel flushes
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
+      // lightweight validation (no alert/confirm)
       if (!this.clientName && !this.address && !this.description && !this.amount) {
-        alert('Nothing to print. Please fill bill details.');
+        console.warn('Nothing to print. Please fill bill details.');
         return;
       }
 
-      this.calculateFinalAmount();
-
-      // NEW: clamp copies (1..50)
+      // clamp copies (1..50)
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
-      // NEW: build HTML with repeated pages
+      this.calculateFinalAmount();
+
+      // Build multi-copy HTML (N pages)
       const html = this.buildPrintHtml({
         clientName: this.clientName || '',
         address: this.address || '',
@@ -155,12 +149,11 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
-      // CHANGED: pass copies to Electron if supported
       if (el?.printCanonA4) {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          alert('Print failed: ' + (res?.error || 'Unknown error'));
+          // optional: toast/snackbar here (non-modal)
         }
       } else {
         // Browser fallback: HTML already contains N pages
@@ -168,9 +161,18 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       }
     } catch (err: any) {
       console.error('Print failed:', err);
-      alert('Print failed. ' + (err?.message || 'Please check the printer connection.'));
+      // optional: non-blocking UI notice here
     } finally {
       this.isPrinting = false;
+
+      // Small local nudge
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+        try { window.focus(); } catch {}
+      }, 40);
+
+      // Ask main to do a gentle refocus (single, non-intrusive)
+      try { (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
 
@@ -191,7 +193,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-      alert('Unable to create print frame.');
+      console.error('Unable to create print frame.');
       return;
     }
 
@@ -201,7 +203,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
 
     const waitForAssets = async () => {
       const promises: Promise<unknown>[] = [];
-      // @ts-ignore
+      // @ts-ignore fonts may not exist in some engines
       if ((doc as any).fonts?.ready) promises.push((doc as any).fonts.ready);
       Array.from(doc.images || []).forEach(img => {
         if (!img.complete) {
@@ -232,7 +234,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
     description: string;
     amount: number;
     discount: number;     // percent
-    finalAmount: number;  // may be precomputed; we also recompute defensively
+    finalAmount: number;  // may be precomputed; recompute defensively
   }, copies: number = 1): string {
     const esc = (s: string) =>
       (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -287,7 +289,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
         .gst-no {
           font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
           font-size: 16px;
-          letter-spacing: 1px; /* spacing makes each digit clearer */
+          letter-spacing: 1px;
         }
         .left-info label { font-weight: 700; white-space: nowrap; }
 
@@ -372,7 +374,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
   }
 
   emailBill(): void {
-    // Flush any focused control so ngModel writes latest values
+    // Flush focus so ngModel writes latest values
     const active = document.activeElement as HTMLElement | null;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
@@ -382,10 +384,8 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
         return;
       }
 
-      // Make sure amounts are up to date
       this.calculateFinalAmount();
 
-      // Build the print-ready HTML using the SAME template you print
       const pdfHtml = this.buildPrintHtml({
         clientName: this.clientName || '',
         address: this.address || '',
@@ -402,8 +402,8 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
         address: this.address,
         billNumber: this.billNumber,
         billDate: this.billDate,
-        discount: this.discount,            // percent
-        discountAmount: this.marginValue,   // ← NEW
+        discount: this.discount,
+        discountAmount: this.marginValue,
         totalAmount: this.amount,
         finalAmount: this.finalAmount,
         description: this.description,

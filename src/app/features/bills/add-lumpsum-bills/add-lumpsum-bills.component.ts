@@ -24,7 +24,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
   billDate: string = new Date().toISOString().substring(0, 10);
   manualEmail: string = '';
 
-  copiesCount = 2;              // NEW: default to 1
+  copiesCount = 2;
   private isPrinting = false;
 
   constructor(
@@ -64,7 +64,6 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       this.clientName = c.firstName;
       this.address = [c.address1, c.address2, c.area, c.city].filter(Boolean).join(', ');
 
-      // Trigger auto-resize even for short addresses like "MUMBAI"
       setTimeout(() => {
         const textArea = document.querySelector('.address-area') as HTMLTextAreaElement;
         if (textArea) {
@@ -94,8 +93,8 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       address: this.address,
       billNumber: this.billNumber,
       billDate: this.billDate,
-      discount: this.discount,            // percent (e.g., 15)
-      discountAmount: this.marginValue,   // numeric value (e.g., 185.10)
+      discount: this.discount,
+      discountAmount: this.marginValue,
       totalAmount: this.amount,
       finalAmount: this.finalAmount,
       description: this.description,
@@ -104,19 +103,14 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     };
 
     this.billsService.saveBill(billData).subscribe({
-      next: () => {
-        alert('Bill saved successfully!');
-      },
+      next: () => alert('Bill saved successfully!'),
       error: () => alert('Failed to save bill. Please try again.')
     });
   }
 
-  // --- PRINT: supports multiple copies now ---
+  // --- PRINT: supports multiple copies and unfrozen UI after print ---
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
-
-    const confirmed = confirm("Are you sure you want to print this bill?");
-    if (!confirmed) return;
 
     this.isPrinting = true;
     try {
@@ -124,18 +118,15 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
-      // quick validation
+      // quick validation (non-modal)
       if (!this.clientName && !this.address && !this.description && !this.amount) {
-        alert('Nothing to print. Please fill bill details.');
+        console.warn('Nothing to print. Please fill bill details.');
         return;
       }
 
-      // clamp copies (1..50)
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
-
       this.calculateFinalAmount();
 
-      // Build **multi-copy** HTML (one print job with N pages)
       const html = this.buildPrintHtml({
         clientName: this.clientName || '',
         address: this.address || '',
@@ -150,29 +141,31 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
-      // Prefer Electron IPC (if your main process supports a copies option, we pass it too)
       if (el?.printCanonA4) {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          alert('Print failed: ' + (res?.error || 'Unknown error'));
+          // Non-blocking notice
         }
       } else {
-        // Browser fallback: the HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
       }
     } catch (err) {
       console.error('Print failed:', err);
-      alert('Print failed. Please check the printer connection.');
     } finally {
       this.isPrinting = false;
+
+      // Local nudge
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+        try { window.focus(); } catch {}
+      }, 40);
+
+      // Ask main to do a HARD re-focus (minimize/restore + AOT dance)
+      try { (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
 
-  /**
-   * Build printable HTML. When copies > 1, we repeat the invoice block with a page break
-   * so the printer outputs N identical pages in a single job.
-   */
   private buildPrintHtml(meta: {
     clientName: string;
     address: string;
@@ -296,15 +289,9 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
     const pages = Array.from({ length: Math.max(1, copies) }, () => onePage).join('\n');
 
-    return `
-      <!doctype html>
-      <html>
-        <head><meta charset="utf-8"/><title>Lumpsum Invoice ${esc(meta.billNumber)}</title>${styles}</head>
-        <body>${pages}</body>
-      </html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"/><title>Lumpsum Invoice ${esc(meta.billNumber)}</title>${styles}</head><body>${pages}</body></html>`;
   }
 
-  /** Fallback for non-Electron environments */
   private async printHtmlInHiddenIframe(html: string): Promise<void> {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -323,23 +310,18 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       return;
     }
 
-    doc.open();
-    doc.write(html);
-    doc.close();
+    doc.open(); doc.write(html); doc.close();
 
     const waitForAssets = async () => {
       const promises: Promise<unknown>[] = [];
-      // @ts-ignore fonts may not exist in some engines
+      // @ts-ignore
       if ((doc as any).fonts?.ready) promises.push((doc as any).fonts.ready);
       const imgs = Array.from(doc.images || []);
       imgs.forEach(img => {
-        if (img.complete) return;
-        promises.push(
-          new Promise(res => {
-            img.addEventListener('load', res, { once: true });
-            img.addEventListener('error', res, { once: true });
-          })
-        );
+        if (!img.complete) promises.push(new Promise(res => {
+          img.addEventListener('load', res, { once: true });
+          img.addEventListener('error', res, { once: true });
+        }));
       });
       promises.push(new Promise(res => setTimeout(res, 50)));
       await Promise.all(promises);
@@ -406,13 +388,13 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     }, 10);
   }
 
-  autoResize(event: Event): void {
-    const target = event.target as HTMLTextAreaElement;
+  autoResize = (event: Event): void => {
+    const target = event.target as HTMLTextAreaElement | null;
+    if (!target) return;
     target.style.height = 'auto';
     target.style.height = target.scrollHeight + 'px';
-  }
+  };
 
-  /** Convert raw HTML to a data URL that Electron can load in a hidden window (UTF-8, no base64) */
   private htmlToDataUrl(html: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }

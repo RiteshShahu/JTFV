@@ -683,7 +683,7 @@ app.get('*', (req, res) => {
   }
 });
 
-// ==================== START SERVER WITH SHUTDOWN HANDLING ====================
+// ==================== START SERVER ====================
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
@@ -698,10 +698,15 @@ function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+// ❗ Keep server alive on unexpected errors
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
-  shutdown();
+  console.error('❌ Uncaught Exception (server kept alive):', err);
 });
+process.on('unhandledRejection', (reason) => {
+  console.error('❌ Unhandled Rejection (server kept alive):', reason);
+});
+
 process.on('exit', (code) => {
   console.log(`Process exiting with code: ${code}`);
 });

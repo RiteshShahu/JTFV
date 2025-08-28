@@ -1,11 +1,15 @@
 // main-electron.js
-// Run with: contextIsolation: true, nodeIntegration: false
-
+// Run with: contextIsolation: true, nodeIntegration: false (ESM)
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import path, { dirname } from 'path';
 import { spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+// pdf-to-printer is CJS; use createRequire so it works in ESM
+const { print: printPdf } = require('pdf-to-printer');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,7 +40,6 @@ async function loadWithRetry(win, url, attempts = 15, delayMs = 300) {
       await new Promise(r => setTimeout(r, delayMs));
     }
   }
-  // Final try so the error surfaces if still failing
   await win.loadURL(url);
 }
 
@@ -108,44 +111,66 @@ const createWindow = () => {
 };
 
 /* ======================
-   PRINT HELPERS & IPC
+   GENTLE REFOCUS (single, no minimize/restore)
    ====================== */
 
-// Electron/Chromium custom size uses MICRONS (1 mm = 1000 µm)
+function getMainWindow() {
+  return BrowserWindow.getAllWindows().find(w => !w.isDestroyed()) || mainWindow;
+}
+
+/** A light, non-intrusive focus nudge:
+ * - briefly setAlwaysOnTop to pull the window forward
+ * - focus app + webContents
+ * - revert AOT after ~150ms
+ * No minimize/restore. No multiple pulses.
+ */
+function gentleRefocus() {
+  const w = getMainWindow();
+  if (!w) return;
+
+  try { app.focus({ steal: true }); } catch {}
+  try { w.setAlwaysOnTop(true, 'screen-saver'); } catch {}
+  try { w.show(); w.focus(); w.webContents.focus(); } catch {}
+  try { w.moveTop?.(); } catch {}
+
+  setTimeout(() => {
+    try { w.setAlwaysOnTop(false); } catch {}
+    try { w.focus(); w.webContents.focus(); } catch {}
+  }, 150);
+}
+
+ipcMain.handle('ui:refocus-hard', () => { gentleRefocus(); });
+
+/* ======================
+   PRINT HELPERS (PDF → SPOOL)
+   ====================== */
+
+// Microns helper (Electron uses µm for custom sizes)
 const mm = n => n * 1000;
 
+// Common sizes
 const SIZES = {
   A4: 'A4',
   LABEL_50x50: { width: mm(50), height: mm(50) }
 };
 
-// Preferred queue names / patterns
+// Preferred queue names
 const PRINTER_PREFERENCES = {
   CANON: [
     'Canon LBP2900',
     'Canon LBP2900 on NEW-PC2017',
-    '\\\\NEW-PC2017\\Canon LBP2900',   // UNC share
+    '\\\\NEW-PC2017\\Canon LBP2900',
   ],
-  CITIZEN: [
-    'Citizen CL-E321',
-    'CITIZEN CL-E321',
-  ]
+  CITIZEN: ['Citizen CL-E321', 'CITIZEN CL-E321']
 };
 
-// compat: get printers (async if available)
 async function listPrinters(win) {
   const wc = win.webContents;
-  if (typeof wc.getPrintersAsync === 'function') {
-    return (await wc.getPrintersAsync()) || [];
-  }
+  if (typeof wc.getPrintersAsync === 'function') return (await wc.getPrintersAsync()) || [];
   return wc.getPrinters() || [];
 }
+const normalize = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
-function normalize(s) {
-  return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-// Pick the best available printer by trying exact, then case-insensitive, then fuzzy
 async function resolvePrinterName(win, preferredNames) {
   const printers = await listPrinters(win);
   const names = printers.map(p => p.name);
@@ -169,56 +194,33 @@ async function resolvePrinterName(win, preferredNames) {
   return null;
 }
 
-function doPrint(win, { deviceName, pageSize, landscape = false, silent = true, printBackground = true }) {
-  log(`🖨️ Printing on "${deviceName}" pageSize=${JSON.stringify(pageSize)} landscape=${landscape}`);
-  return new Promise((resolve, reject) => {
-    win.webContents.print(
-      { deviceName, pageSize, landscape, silent, printBackground },
-      (success, failureReason) => {
-        if (!success) {
-          log(`❌ Print failed: ${failureReason || 'Unknown reason'}`);
-          reject(new Error(failureReason || 'Print failed'));
-        } else {
-          log('✅ Print succeeded');
-          resolve();
-        }
-      }
-    );
-  });
-}
-
-// Create a hidden window for print jobs
 function createPrintWindow() {
-  const w = new BrowserWindow({
+  // hidden, unfocusable, not modal
+  return new BrowserWindow({
     show: false,
     width: 600,
     height: 800,
-    webPreferences: {
-      backgroundThrottling: false,
-      offscreen: false, // offscreen can interfere with print in some drivers
-    },
+    focusable: false,
+    skipTaskbar: true,
+    minimizable: false,
+    maximizable: false,
+    webPreferences: { backgroundThrottling: false, offscreen: false },
   });
-  return w;
 }
 
-// --- Data URL helpers & robust loader ---
-
-/** Decode HTML from data: URL (supports base64 or UTF-8 encoded payloads) */
 function htmlFromDataUrl(dataUrl) {
   const m = /^data:text\/html(?:;charset=[^;]+)?(;base64)?,(.*)$/i.exec(dataUrl || '');
   if (!m) return '<!doctype html><meta charset="utf-8"><p>Invalid data URL</p>';
   const isB64 = Boolean(m[1]);
-  const payload = m[2];
   try {
     return isB64
-      ? Buffer.from(payload, 'base64').toString('utf8')
-      : decodeURIComponent(payload);
-  } catch (e) {
+      ? Buffer.from(m[2], 'base64').toString('utf8')
+      : decodeURIComponent(m[2]);
+  } catch {
     return '<!doctype html><meta charset="utf-8"><p>Failed to decode data URL</p>';
   }
 }
 
-/** Load HTML robustly by writing into about:blank, avoiding flaky data:URL events */
 async function loadHtmlIntoWindow(win, html) {
   await win.loadURL('about:blank');
   await win.webContents.executeJavaScript(`
@@ -226,72 +228,117 @@ async function loadHtmlIntoWindow(win, html) {
     document.write(${JSON.stringify(html)});
     document.close();
   `);
-  // allow layout/paint
-  await new Promise(r => setTimeout(r, 100));
+  await new Promise(r => setTimeout(r, 120)); // allow layout/paint
 }
 
-/** Optional old path; now unused but kept for reference */
-async function loadAndWait(win, url, timeoutMs = 8000) {
-  await win.loadURL(url);
-  const finished = new Promise((res) => {
-    if (!win.webContents.isLoadingMainFrame()) return res();
-    win.webContents.once('did-finish-load', res);
-  });
-  const timed = new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout waiting for did-finish-load')), timeoutMs));
-  return Promise.race([finished, timed]);
+// Write a temp PDF file; return absolute path
+function writeTempPdf(buffer, prefix = 'jt-invoice') {
+  const dir = app.getPath('temp') || os.tmpdir();
+  const file = path.join(dir, `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+  fs.writeFileSync(file, buffer);
+  return file;
 }
 
-// DEBUG: list printers from renderer
+// The core: render to PDF then spool to printer
+async function printHtmlViaPdfSpool({ html, printerName, pageSize, landscape = false, copies = 1 }) {
+  const win = createPrintWindow();
+  let pdfPath = '';
+  try {
+    await loadHtmlIntoWindow(win, html);
+
+    // Render to PDF (A4 or custom µm)
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      landscape,
+      marginsType: 1,
+      pageSize, // 'A4' or {width,height} in µm
+    });
+
+    pdfPath = writeTempPdf(pdfBuffer, 'jt-bill');
+
+    log(`Spooling PDF to printer="${printerName}" copies=${copies} path=${pdfPath}`);
+
+    await printPdf(pdfPath, {
+      printer: printerName,
+      copies: Math.max(1, Math.floor(copies || 1)),
+    });
+
+    log('✅ Spool finished');
+  } finally {
+    try { if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath); } catch {}
+    try { if (!win.isDestroyed()) win.close(); } catch {}
+  }
+}
+
+/* ======================
+   IPC HANDLERS (PDF → SPOOL)
+   ====================== */
+
 ipcMain.handle('print:list', async () => {
   const win = createPrintWindow();
   try {
-    const list = await listPrinters(win);
-    return list;
+    return await listPrinters(win);
+  } catch (err) {
+    log(`❌ print:list error: ${err?.message || err}`);
+    return [];
   } finally {
-    win.close();
+    try { if (!win.isDestroyed()) win.close(); } catch {}
   }
 });
 
-// Bills → Canon LBP2900 (any queue variant) → A4
-ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false } = {}) => {
-  log(`IPC print:canon-a4 URL len=${(url||'').length}`);
+ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies = 1 } = {}) => {
+  log(`IPC print:canon-a4 URL len=${(url||'').length}, copies=${copies}`);
   const win = createPrintWindow();
   try {
-    // Robust path: decode data URL and write into about:blank
     const html = htmlFromDataUrl(url);
-    await loadHtmlIntoWindow(win, html);
 
+    // pick printer
     const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CANON);
-    if (!deviceName) throw new Error('Canon LBP2900 printer not found.');
-    // For debugging driver issues once, set silent:false
-    await doPrint(win, { deviceName, pageSize: SIZES.A4, landscape, silent: true });
+    if (!deviceName) return { ok: false, error: 'Canon LBP2900 printer not found.' };
+
+    // PDF → spool route (avoids Chromium print loop/focus issues)
+    await printHtmlViaPdfSpool({
+      html,
+      printerName: deviceName,
+      pageSize: SIZES.A4,
+      landscape,
+      copies
+    });
+
     return { ok: true };
   } catch (err) {
     log(`❌ IPC print:canon-a4 error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
-    win.close();
+    try { if (!win.isDestroyed()) win.close(); } catch {}
+    gentleRefocus(); // soft refocus after print
   }
 });
 
-// Barcodes → Citizen CL-E321 → 50x50mm
-ipcMain.handle('print:citizen-50', async (_event, { url } = {}) => {
-  log(`IPC print:citizen-50 URL len=${(url||'').length}`);
+ipcMain.handle('print:citizen-50', async (_event, { url, copies = 1 } = {}) => {
+  log(`IPC print:citizen-50 URL len=${(url||'').length}, copies=${copies}`);
   const win = createPrintWindow();
   try {
-    // Robust path: decode data URL and write into about:blank
     const html = htmlFromDataUrl(url);
-    await loadHtmlIntoWindow(win, html);
 
     const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CITIZEN);
-    if (!deviceName) throw new Error('Citizen CL-E321 printer not found.');
-    await doPrint(win, { deviceName, pageSize: SIZES.LABEL_50x50, landscape: false, silent: true });
+    if (!deviceName) return { ok: false, error: 'Citizen CL-E321 printer not found.' };
+
+    await printHtmlViaPdfSpool({
+      html,
+      printerName: deviceName,
+      pageSize: SIZES.LABEL_50x50,
+      landscape: false,
+      copies
+    });
+
     return { ok: true };
   } catch (err) {
     log(`❌ IPC print:citizen-50 error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
-    win.close();
+    try { if (!win.isDestroyed()) win.close(); } catch {}
+    pulseRefocus();
   }
 });
 
@@ -324,7 +371,7 @@ app.whenReady().then(() => {
   serverProcess = spawn('node', [serverPath], {
     env: {
       ...process.env,
-      ELECTRON_DISABLE_SECURITY_WARNINGS: 'true',
+      ELECTRON_DISABLE_SECURITY_WARNINGS: 'false',
       NODE_ENV: isDev ? 'development' : 'production',
       RUNNING_IN_ELECTRON: 'true',
       USER_DATA_PATH: userDataPath,
@@ -364,7 +411,13 @@ app.on('before-quit', () => {
   if (serverProcess) try { serverProcess.kill(); } catch {}
 });
 
+/* ======================
+   MAIN-PROCESS SAFETY
+   ====================== */
 process.on('uncaughtException', (err) => {
-  log(`❌ Uncaught exception: ${err.message}`);
-  if (serverProcess) try { serverProcess.kill(); } catch {}
+  log(`❌ Main uncaughtException: ${err?.stack || err}`);
+  // don't exit — keep the app alive
+});
+process.on('unhandledRejection', (reason) => {
+  log(`❌ Main unhandledRejection: ${reason?.stack || reason}`);
 });

@@ -270,9 +270,6 @@ export class BillsComponent implements OnInit {
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    const confirmed = confirm("Are you sure you want to print this bill?");
-    if (!confirmed) return;
-
     this.isPrinting = true;
 
     try {
@@ -289,7 +286,7 @@ export class BillsComponent implements OnInit {
         }));
 
       if (validItems.length === 0) {
-        alert('No valid items to print. Please check quantity and price fields.');
+        console.warn('No valid items to print. Please check quantity and price fields.');
         return;
       }
 
@@ -319,7 +316,6 @@ export class BillsComponent implements OnInit {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          alert('Print failed: ' + (res?.error || 'Unknown error'));
         }
       } else {
         // Browser fallback: HTML already contains N pages
@@ -327,9 +323,17 @@ export class BillsComponent implements OnInit {
       }
     } catch (err: any) {
       console.error('Print failed:', err);
-      alert('Print failed. ' + (err?.message || 'Please check the printer connection.'));
     } finally {
       this.isPrinting = false;
+
+      // Local nudge
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+        try { window.focus(); } catch {}
+      }, 40);
+
+      // Ask main to do a HARD re-focus (minimize/restore + AOT dance)
+      try { (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
 
