@@ -133,7 +133,7 @@ select.form-control, textarea.form-control { line-height: 1.4; }
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 10px;
-  margin-top: 10px;
+  margin: 10px 0 10px 0;
 }
 .boxes.compact .left-column {
   display: flex;
