@@ -37,6 +37,7 @@ export class BillsComponent implements OnInit {
   finalAmount: number = 0;
   manualEmail: string = '';
 
+  copiesCount = 1;
   // prevent double-prints
   private isPrinting = false;
 
@@ -296,7 +297,11 @@ export class BillsComponent implements OnInit {
       const discountAmount = totalAmount * (this.discount / 100);
       const finalAmount = totalAmount - discountAmount;
 
-      let html = this.buildPrintHtml(validItems, {
+      // NEW: clamp copies (1..50)
+      const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
+
+      // NEW: build HTML that repeats the page N times with page breaks
+      const html = this.buildPrintHtmlMulti(validItems, {
         clientName: this.clientName,
         address: this.address,
         billNumber: this.billNumber,
@@ -304,25 +309,20 @@ export class BillsComponent implements OnInit {
         discount: this.discount,
         totalAmount,
         finalAmount
-      });
-
-      // ✅ Ask for number of copies
-      const copiesStr = prompt('How many copies to print?', '1');
-      const copies = Math.max(1, Math.min(10, parseInt(copiesStr || '1', 10)));
-      if (copies > 1) {
-        html = this.duplicatePages(html, copies);
-      }
+      }, copies);
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        const res = await el.printCanonA4(dataUrl, { landscape: false });
+        // Pass copies to Electron (if your main handler supports it)
+        const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
           alert('Print failed: ' + (res?.error || 'Unknown error'));
         }
       } else {
+        // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
       }
     } catch (err: any) {
@@ -333,28 +333,50 @@ export class BillsComponent implements OnInit {
     }
   }
 
-/** Duplicate the printed page N times inside the same print job */
-  private duplicatePages(html: string, copies: number): string {
-    if (!copies || copies <= 1) return html;
+  // NEW: multi-page builder (wraps your existing single-page template)
+  private buildPrintHtmlMulti(
+    items: Array<{ productId: number | null; productName: string; quantity: number; price: number; total?: number }>,
+    meta: {
+      clientName: string;
+      address: string;
+      billNumber: string;
+      billDate: string;
+      discount: number;
+      totalAmount: number;
+      finalAmount: number;
+    },
+    copies: number
+  ): string {
+    // reuse your existing single-page builder to get the inner <body> content
+    const single = this.buildPrintHtml(items, meta);
 
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    if (!bodyMatch) return html;
+    // extract inside <body>...</body> (quick & safe enough for our controlled template)
+    const match = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = match ? match[1] : single;
 
-    const headCloseIdx = html.search(/<\/head>/i);
-    const extraStyle = `<style>@media print{.pagebreak{page-break-after:always}.print-copy{break-inside:avoid}}</style>`;
-    const withStyle =
-      headCloseIdx > -1
-        ? html.slice(0, headCloseIdx) + extraStyle + html.slice(headCloseIdx)
-        : html; // fallback if no <head>
+    const styles = `
+      <style>
+        @page { size: A4; margin: 10mm; }
+        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; }
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+      </style>
+    `;
 
-    const inner = bodyMatch[1];
-    const repeated = Array.from({ length: copies }, (_, i) =>
-      i < copies - 1
-        ? `<div class="print-copy">${inner}</div><div class="pagebreak"></div>`
-        : `<div class="print-copy">${inner}</div>`
-    ).join('');
+    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
 
-    return withStyle.replace(bodyMatch[0], `<body>${repeated}</body>`);
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8"/>
+          <title>Invoice ${meta.billNumber}</title>
+          ${styles}
+        </head>
+        <body>${pages}</body>
+      </html>
+    `;
   }
   
   private formatDateDDMMYYYY(iso: string): string {

@@ -5,6 +5,7 @@ import { AppComponent } from './app.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatCardModule } from '@angular/material/card';
+import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
@@ -31,11 +32,13 @@ import { RelianceBillsComponent } from './features/bills/reliance-bills/reliance
 import { EditRelianceBillsComponent } from './features/bills/edit-reliance-bills/edit-reliance-bills.component';
 import { LabelPrintHistoryComponent } from './features/barcode/label-print-history/label-print-history.component';
 
+
 @NgModule({
   imports: [
     BrowserModule,
     AppRoutingModule,
     BrowserAnimationsModule,
+    CommonModule,
     FormsModule,
     ReactiveFormsModule,
     HttpClientModule,
@@ -66,7 +69,7 @@ import { LabelPrintHistoryComponent } from './features/barcode/label-print-histo
     EditLumpsumBillsComponent,
     RelianceBillsComponent,
     EditRelianceBillsComponent,
-    LabelPrintHistoryComponent,
+    LabelPrintHistoryComponent
   ],
 
   providers: [],

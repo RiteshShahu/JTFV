@@ -58,6 +58,7 @@ export class EditRelianceBillsComponent implements OnInit {
   receivedAmount: number = 0;   // user-entered value
   balanceAmount: number = 0;    // computed balance
 
+  copiesCount = 1; // number of copies to print
   private isPrinting = false;
 
   constructor(
@@ -414,11 +415,36 @@ export class EditRelianceBillsComponent implements OnInit {
     </body></html>`;
   }
 
-  /** PRINT — no preview. Uses Electron API first; hidden-iframe as fallback. */
+  /** Build multi-copy HTML by repeating the single-page body with page breaks */
+  private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
+    const single = this.buildPrintHtml(validItems); // your existing single-page HTML
+    const bodyMatch = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = bodyMatch ? bodyMatch[1] : single;
+
+    const styles = `
+      <style>
+        @page { size: A4; margin: 10mm; }
+        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; }
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+      </style>
+    `;
+
+    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
+
+    return `
+      <!doctype html>
+      <html>
+        <head><meta charset="utf-8"/><title>Invoice ${this.billNumber}</title>${styles}</head>
+        <body>${pages}</body>
+      </html>`;
+  }
+
+  /** PRINT — supports multiple copies. Electron first; hidden-iframe fallback. */
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    // Show confirmation before proceeding
     const confirmed = confirm("Are you sure you want to print this bill?");
     if (!confirmed) return;
 
@@ -427,19 +453,15 @@ export class EditRelianceBillsComponent implements OnInit {
     try {
       this.ensureRelianceDefaults();
 
-      // Normalize rows
+      // Normalize rows (same as before)
       const validItems = this.billItems
         .filter(it => it.productId !== null)
         .map(it => {
           const prod = this.products.find(p => p.id === it.productId);
-          if (prod) {
-            it.productName = prod.name + (prod.units ? ' ' + prod.units : '');
-          }
+          if (prod) it.productName = prod.name + (prod.units ? ' ' + prod.units : '');
           const qty = Number(it.quantity || 0);
           if (it.manualTotal) {
-            if (qty > 0 && isFinite(qty)) {
-              it.price = +((Number(it.total || 0) / qty)).toFixed(2);
-            }
+            if (qty > 0 && isFinite(qty)) it.price = +((Number(it.total || 0) / qty)).toFixed(2);
           } else {
             it.total = +((qty * Number(it.price || 0))).toFixed(2);
           }
@@ -451,33 +473,29 @@ export class EditRelianceBillsComponent implements OnInit {
         return;
       }
 
-      // Recompute page totals for footer
-      this.totalAmount   = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+      // Totals for footer
       this.totalQuantity = validItems.reduce((a, it) => a + (it.quantity || 0), 0);
+      this.totalAmount   = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+      this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
 
-      // Build base HTML
-      let html = this.buildPrintHtml(validItems);
+      // NEW: clamp copies (1..50)
+      const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
-      // ✅ Ask for number of copies (Cancel ⇒ abort), clamp 1..10
-      const copiesStr = prompt('How many copies to print?', '1');
-      if (copiesStr === null) return; // user cancelled
-      const parsed = parseInt(copiesStr, 10);
-      const copies = Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 1;
-
-      if (copies > 1) {
-        html = this.duplicatePages(html, copies);
-      }
+      // NEW: multi-copy HTML (N pages)
+      const html = this.buildPrintHtmlMulti(validItems, copies);
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        const res = await el.printCanonA4(dataUrl, { landscape: false });
+        // Pass copies to Electron (if your main handler supports it)
+        const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
           alert('Print failed: ' + (res?.error || 'Unknown error'));
         }
       } else {
+        // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
       }
     } catch (err) {
@@ -487,32 +505,7 @@ export class EditRelianceBillsComponent implements OnInit {
       this.isPrinting = false;
     }
   }
-
-  /** Duplicate the printed page N times inside the same print job */
-  private duplicatePages(html: string, copies: number): string {
-    if (!copies || copies <= 1) return html;
-
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    if (!bodyMatch) return html;
-
-    // Ensure page-break styles exist
-    const headCloseIdx = html.search(/<\/head>/i);
-    const extraStyle = `<style>@media print{.pagebreak{page-break-after:always}.print-copy{break-inside:avoid}}</style>`;
-    const withStyle =
-      headCloseIdx > -1
-        ? html.slice(0, headCloseIdx) + extraStyle + html.slice(headCloseIdx)
-        : html;
-
-    const inner = bodyMatch[1];
-    const repeated = Array.from({ length: copies }, (_, i) =>
-      i < copies - 1
-        ? `<div class="print-copy">${inner}</div><div class="pagebreak"></div>`
-        : `<div class="print-copy">${inner}</div>`
-    ).join("");
-
-    return withStyle.replace(bodyMatch[0], `<body>${repeated}</body>`);
-  }
-
+    
   emailBill(): void {
     this.ensureRelianceDefaults();
 

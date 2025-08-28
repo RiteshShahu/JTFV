@@ -36,6 +36,7 @@ export class EditBillsComponent implements OnInit {
   clients: any[] = [];
   selectedClient: any = null;
 
+  copiesCount = 1;
   private isPrinting = false;
 
   constructor(
@@ -329,8 +330,7 @@ export class EditBillsComponent implements OnInit {
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    // Show confirmation before proceeding
-    const confirmed = confirm("Are you sure you want to print this bill?");
+    const confirmed = confirm('Are you sure you want to print this bill?');
     if (!confirmed) return;
 
     this.isPrinting = true;
@@ -353,45 +353,35 @@ export class EditBillsComponent implements OnInit {
         return;
       }
 
-      const totalAmount = validItems.reduce(
-        (acc, it) => acc + (it.quantity || 0) * (it.price || 0),
-        0
-      );
-      const discountAmount = totalAmount * (this.discount / 100);
-      const finalAmount = totalAmount - discountAmount;
+      const totalAmount = validItems.reduce((acc, it) => acc + (it.quantity || 0) * (it.price || 0), 0);
+      const finalAmount = totalAmount - totalAmount * (this.discount / 100);
 
-      // Build base HTML
-      let html = this.buildPrintHtml(validItems, {
+      // NEW: clamp copies (1..50)
+      const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
+
+      // NEW: build HTML with N pages (one per copy)
+      const html = this.buildPrintHtmlMulti(validItems, {
         clientName: this.clientName,
         address: this.address,
         billNumber: this.billNumber,
         billDate: this.billDate,
         discount: this.discount,
         totalAmount,
-        finalAmount,
-      });
-
-      // ✅ Ask for number of copies (Cancel -> abort)
-      const copiesStr = prompt('How many copies to print?', '1');
-      if (copiesStr === null) return; // user cancelled prompt
-
-      const parsed = parseInt(copiesStr, 10);
-      const copies = Number.isFinite(parsed) ? Math.max(1, Math.min(10, parsed)) : 1;
-
-      if (copies > 1) {
-        html = this.duplicatePages(html, copies);
-      }
+        finalAmount
+      }, copies);
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        const res = await el.printCanonA4(dataUrl, { landscape: false });
+        // Pass copies to Electron if your main handler supports it
+        const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
           alert('Print failed: ' + (res?.error || 'Unknown error'));
         }
       } else {
+        // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
       }
     } catch (err: any) {
@@ -402,31 +392,51 @@ export class EditBillsComponent implements OnInit {
     }
   }
 
-  /** Duplicate the printed page N times inside the same print job */
-  private duplicatePages(html: string, copies: number): string {
-    if (!copies || copies <= 1) return html;
+  // NEW: Wrapper that repeats your single-page template with page breaks
+  private buildPrintHtmlMulti(
+    items: Array<{ productId: number | null; productName: string; quantity: number; price: number; total?: number }>,
+    meta: {
+      clientName: string;
+      address: string;
+      billNumber: string;
+      billDate: string;
+      discount: number;
+      totalAmount: number;
+      finalAmount: number;
+    },
+    copies: number
+  ): string {
+    const single = this.buildPrintHtml(items, meta); // reuse your existing builder
 
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    if (!bodyMatch) return html;
+    // Extract the <body> content from the single-page HTML
+    const match = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const bodyContent = match ? match[1] : single;
 
-    // Ensure pagebreak styles exist
-    const headCloseIdx = html.search(/<\/head>/i);
-    const extraStyle = `<style>@media print{.pagebreak{page-break-after:always}.print-copy{break-inside:avoid}}</style>`;
-    const withStyle =
-      headCloseIdx > -1
-        ? html.slice(0, headCloseIdx) + extraStyle + html.slice(headCloseIdx)
-        : html;
+    const styles = `
+      <style>
+        @page { size: A4; margin: 10mm; }
+        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; }
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+      </style>
+    `;
 
-    const inner = bodyMatch[1];
-    const repeated = Array.from({ length: copies }, (_, i) =>
-      i < copies - 1
-        ? `<div class="print-copy">${inner}</div><div class="pagebreak"></div>`
-        : `<div class="print-copy">${inner}</div>`
-    ).join("");
+    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
 
-    return withStyle.replace(bodyMatch[0], `<body>${repeated}</body>`);
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8"/>
+          <title>Invoice ${meta.billNumber}</title>
+          ${styles}
+        </head>
+        <body>${pages}</body>
+      </html>
+    `;
   }
-
+  
   /** ========== EMAIL BILL ========== */
   emailBill(): void {
     const validItems = this.billItems.filter(

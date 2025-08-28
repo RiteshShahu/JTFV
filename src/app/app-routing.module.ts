@@ -1,7 +1,7 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { AddMerchantComponent } from './features/dashboard/add-merchant/add-merchant.component';
 import { LoginComponent } from './features/login/login.component';
+import { AddMerchantComponent } from './features/dashboard/add-merchant/add-merchant.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { ProductsComponent } from './features/products/products.component';
 import { ReportsComponent } from './features/bills/reports/reports.component';

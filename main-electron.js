@@ -55,7 +55,9 @@ const createWindow = () => {
   });
 
   const url = 'http://localhost:3001';
-  loadWithRetry(mainWindow, url).catch(err => log(`❌ Final load failed: ${err?.message || err}`));
+  loadWithRetry(mainWindow, url).catch(err =>
+    log(`❌ Final load failed: ${err?.message || err}`)
+  );
   log(`Loaded URL: ${url}`);
 
   mainWindow.webContents.on('did-finish-load', () => {
@@ -66,10 +68,38 @@ const createWindow = () => {
     log(`❌ Renderer failed to load ${validatedURL}: ${desc} (${code})`);
   });
 
+  // ✅ Allow Angular SPA navigations, block only true external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url === 'about:blank') return { action: 'allow' };
+    const sameOrigin =
+      url.startsWith('http://localhost:3001') ||
+      url.startsWith('https://localhost:3001') ||
+      url === 'about:blank';
+
+    if (sameOrigin) {
+      return { action: 'allow' };
+    }
+
+    // Open all other URLs externally
     shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // ✅ Extra guard for redirects
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const sameOrigin = url.startsWith('http://localhost:3001');
+    if (!sameOrigin) {
+      event.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+
+  // Debug renderer crashes
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    log(`❌ render-process-gone: ${details.reason}`);
+  });
+
+  mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    log(`🧪 console[${level}] ${sourceId}:${line} ${message}`);
   });
 
   if (!app.isPackaged) {
@@ -322,11 +352,16 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  log('Window closed. Killing server process...');
-  if (serverProcess) try { serverProcess.kill(); } catch {}
+  log('All windows closed.');
+  // Keep server alive until app.quit()
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  log('App quitting. Killing server process...');
+  if (serverProcess) try { serverProcess.kill(); } catch {}
 });
 
 process.on('uncaughtException', (err) => {

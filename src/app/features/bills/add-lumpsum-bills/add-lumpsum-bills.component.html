@@ -104,15 +104,22 @@
       <label>Grand Total :</label>
       <div>{{ finalAmount | number:'1.2-2' }}</div>
     </div>
+    
+    <label style="margin: 0 8px 0 16px; font-weight: bold;">Copies:</label>
+    <input type="number"
+          [(ngModel)]="copiesCount"
+          min="1" max="50" step="1"
+          class="form-control"
+          style="width: 50px; display: inline-block; margin-right: 10px;"
+          tabindex="5" />
   </div>
 
-  <!-- Actions (unchanged) -->
+  <!-- Actions -->
   <div class="actions no-print">
     <button class="btn btn-success" (click)="saveBill()">Save</button>
     <button class="btn btn-primary" (click)="printBill()">Print</button>
     <input type="email" [(ngModel)]="manualEmail" class="form-control" placeholder="Enter email"
-      style="width: 250px; display: inline-block; margin-right: 10px;"
-    />
+          style="width: 250px; display: inline-block; margin-right: 10px;" />
     <button class="btn btn-secondary" (click)="emailBill()">Email</button>
   </div>
 </div>
