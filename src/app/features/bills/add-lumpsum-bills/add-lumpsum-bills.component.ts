@@ -24,7 +24,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
   billDate: string = new Date().toISOString().substring(0, 10);
   manualEmail: string = '';
 
-  copiesCount = 1;              // NEW: default to 1
+  copiesCount = 2;              // NEW: default to 1
   private isPrinting = false;
 
   constructor(
