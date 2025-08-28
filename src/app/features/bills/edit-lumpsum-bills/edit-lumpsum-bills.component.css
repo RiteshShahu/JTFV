@@ -56,6 +56,12 @@
   font-size: 14px;
 }
 
+.gst-no {
+  font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
+  font-size: 16px;
+  letter-spacing: 1px; /* spacing makes each digit clearer */
+}
+
 .left-info label {
   font-weight: 700;
   white-space: nowrap;

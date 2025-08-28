@@ -284,6 +284,11 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
           font-size: 14px;
         }
         .left-info .line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+        .gst-no {
+          font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
+          font-size: 16px;
+          letter-spacing: 1px; /* spacing makes each digit clearer */
+        }
         .left-info label { font-weight: 700; white-space: nowrap; }
 
         .right-meta .meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -321,7 +326,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
           <div class="left-info">
             <div class="line"><label>NAME :</label><span>${esc(meta.clientName)}</span></div>
             <div class="line"><label>ADDRESS :</label><span style="white-space: pre-line;">${esc(meta.address)}</span></div>
-            <div class="line"><label>GST No :</label><span>27AACCA8432H1ZQ</span></div>
+            <div class="line"><label>GST No :</label><span class="gst-no">27AACCA8432H1ZQ</span></div>
           </div>
 
           <div class="right-meta">

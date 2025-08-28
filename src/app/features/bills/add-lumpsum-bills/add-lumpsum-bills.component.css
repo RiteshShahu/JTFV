@@ -59,7 +59,6 @@
 .gst-no {
   font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
   font-size: 16px;
-  font-weight: 600;
   letter-spacing: 1px; /* spacing makes each digit clearer */
 }
 
