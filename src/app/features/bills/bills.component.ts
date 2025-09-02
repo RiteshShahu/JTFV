@@ -41,6 +41,11 @@ export class BillsComponent implements OnInit {
 
   copiesCount = 1;
   private isPrinting = false;
+  private isSaving = false;
+  private normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
 
   constructor(
     private titleService: Title,
@@ -445,10 +450,18 @@ export class BillsComponent implements OnInit {
   }
 
   saveBill(): void {
-    const billData = {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const targetNo = this.normalizeBillNumber(this.billNumber);
+
+    const payload = {
       clientName: this.clientName,
       address: this.address,
-      billNumber: this.billNumber,
+      billNumber: targetNo,
       billDate: this.billDate,
       discount: this.discount,
       totalAmount: this.totalAmount,
@@ -456,11 +469,28 @@ export class BillsComponent implements OnInit {
       billItems: this.billItems
     };
 
-    this.billsService.saveBill(billData).subscribe({
-      next: () => this.toast.success('Bill saved successfully!'),
-      error: (error: HttpErrorResponse) => {
-        this.toast.error('Failed to save bill. Please try again.');
-        console.error('Error saving bill:', error);
+    this.billsService.billExists(targetNo).subscribe({
+      next: (exists) => {
+        if (exists) {
+          this.toast.warn(`Bill ${targetNo} is already saved.`);
+          this.isSaving = false;
+          return;
+        }
+        this.billsService.saveBill(payload).subscribe({
+          next: () => {
+            this.toast.success('Bill saved successfully!');
+            this.isSaving = false;
+          },
+          error: (error) => {
+            this.toast.error('Failed to save bill. Please try again.');
+            console.error('Error saving bill:', error);
+            this.isSaving = false;
+          }
+        });
+      },
+      error: () => {
+        this.toast.error('Could not verify Bill No. Please try again.');
+        this.isSaving = false;
       }
     });
   }

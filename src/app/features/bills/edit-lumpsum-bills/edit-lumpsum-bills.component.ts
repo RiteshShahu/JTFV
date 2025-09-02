@@ -28,6 +28,12 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
 
   copiesCount = 2;
   private isPrinting = false;
+  private isSaving = false;
+  private originalBillNumber = '';
+  private normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
 
   constructor(
     private route: ActivatedRoute,
@@ -40,6 +46,8 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
   ngOnInit(): void {
     this.titleService.setTitle('Edit Lumpsum Bill');
     this.billNumber = this.route.snapshot.paramMap.get('billNumber') || '';
+    this.originalBillNumber = this.normalizeBillNumber(this.billNumber);
+
 
     // Fetch clients
     this.http.get<any[]>('http://localhost:3001/api/clients').subscribe(data => {
@@ -95,24 +103,62 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
   }
 
   updateBill(): void {
-    const updatedBill = {
-      clientName: this.clientName,
-      address: this.address,
-      billNumber: this.billNumber,
-      billDate: this.billDate,
-      discount: this.discount,            // percent (e.g., 15)
-      discountAmount: this.marginValue,   // numeric value (e.g., 185.10)
-      totalAmount: this.amount,
-      finalAmount: this.finalAmount,
-      description: this.description,
-      billItems: [],
-      billType: 'lumpsum'
+    // flush focus
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const targetNo = this.normalizeBillNumber(this.billNumber);
+
+    const doUpdate = () => {
+      const updatedBill = {
+        clientName: this.clientName,
+        address: this.address,
+        billNumber: targetNo,
+        billDate: this.billDate,
+        discount: this.discount,
+        discountAmount: this.marginValue,
+        totalAmount: this.amount,
+        finalAmount: this.finalAmount,
+        description: this.description,
+        billItems: [],
+        billType: 'lumpsum'
+      };
+
+      this.billsService.updateBill(this.originalBillNumber, updatedBill).subscribe({
+        next: () => {
+          this.toast.success('Bill updated successfully!');
+          this.originalBillNumber = targetNo; // in case you edit again
+          this.isSaving = false;
+        },
+        error: () => {
+          this.toast.error('Failed to update bill. Please try again.');
+          this.isSaving = false;
+        }
+      });
     };
 
-    this.billsService.updateBill(this.billNumber, updatedBill).subscribe({
-      next: () => this.toast.success('Bill updated successfully!'),
-      error: () => this.toast.error('Failed to update bill. Please try again.')
-    });
+    // Only check duplicates if the user changed the bill number
+    if (targetNo !== this.originalBillNumber) {
+      this.billsService.billExists(targetNo).subscribe({
+        next: (exists) => {
+          if (exists) {
+            this.toast.warn(`Bill ${targetNo} already exists.`);
+            this.isSaving = false;
+          } else {
+            doUpdate();
+          }
+        },
+        error: () => {
+          this.toast.error('Could not verify Bill No. Please try again.');
+          this.isSaving = false;
+        }
+      });
+    } else {
+      doUpdate();
+    }
   }
 
   // --- PRINT: non-modal + gentle refocus ---

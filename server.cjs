@@ -123,6 +123,8 @@ db.run(`
     )
   `);
 
+  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bills_billNumber ON bills(billNumber)`);
+
   // Enable FK so items delete with job
   db.run(`PRAGMA foreign_keys = ON`);
 
@@ -338,6 +340,7 @@ app.delete('/api/products/:id', (req, res) => {
 // Create bill
 app.post('/api/bills', (req, res) => {
   const b = req.body;
+  b.billNumber = normalizeBillNumber(b.billNumber);
   const query = `
     INSERT INTO bills (
       clientName, address, billNumber, billDate,
@@ -368,13 +371,16 @@ app.post('/api/bills', (req, res) => {
 // Update bill
 app.put('/api/bills/:billNumber', (req, res) => {
   const b = req.body;
+  b.billNumber = normalizeBillNumber(b.billNumber);
+  const target = normalizeBillNumber(req.params.billNumber);
+
   const query = `
     UPDATE bills SET
       clientName = ?,
       address = ?,
       billDate = ?,
-      discount = ?, 
-      discountAmount = ?,          -- ← added here
+      discount = ?,
+      discountAmount = ?,
       totalAmount = ?,
       finalAmount = ?,
       billItems = ?,
@@ -386,14 +392,14 @@ app.put('/api/bills/:billNumber', (req, res) => {
     b.clientName,
     b.address,
     b.billDate,
-    b.discount,                 // percent
-    b.discountAmount ?? null,   // numeric value
+    b.discount,
+    b.discountAmount ?? null,
     b.totalAmount,
     b.finalAmount,
     JSON.stringify(b.billItems || []),
     b.description || '',
     b.billType || '',
-    req.params.billNumber
+    target
   ];
 
   db.run(query, values, function (err) {
@@ -405,11 +411,16 @@ app.put('/api/bills/:billNumber', (req, res) => {
 
 // Get latest bill number
 app.get('/api/bills/latest', (req, res) => {
-  db.get('SELECT billNumber FROM bills ORDER BY id DESC LIMIT 1', [], (err, row) => {
-    if (err) return res.status(500).json({ message: 'Failed to fetch latest bill number' });
-    const next = row?.billNumber ? (parseInt(row.billNumber) + 1).toString().padStart(3, '0') : '001';
-    res.json({ billNumber: next });
-  });
+  db.get(
+    `SELECT MAX(CAST(billNumber AS INTEGER)) AS n FROM bills`,
+    [],
+    (err, row) => {
+      if (err) return res.status(500).json({ message: 'Failed to fetch latest bill number' });
+      const nextNum = (row?.n ? parseInt(row.n, 10) : 0) + 1;
+      const next = String(nextNum).padStart(3, '0');
+      res.json({ billNumber: next });
+    }
+  );
 });
 
 // Get all bills
@@ -418,6 +429,34 @@ app.get('/api/bills', (req, res) => {
     if (err) return res.status(500).json({ message: 'Failed to fetch bills' });
     res.json(rows);
   });
+});
+
+// Check if bill number exists (with variants)
+app.get('/api/bills/exists', (req, res) => {
+  const raw = (req.query.billNumber ?? '').toString().trim();
+  if (!raw) return res.status(400).json(false);
+
+  // Build variants: raw, integer, and zero-padded 3-digit
+  const n = parseInt(raw, 10);
+  const variants = new Set([raw]);
+  if (!Number.isNaN(n)) {
+    variants.add(String(n));
+    variants.add(String(n).padStart(3, '0'));
+  }
+  const args = Array.from(variants);
+
+  const placeholders = args.map(() => '?').join(',');
+  db.get(
+    `SELECT 1 FROM bills WHERE billNumber IN (${placeholders}) LIMIT 1`,
+    args,
+    (err, row) => {
+      if (err) {
+        console.error('billExists error:', err);
+        return res.status(500).json(false);
+      }
+      res.json(!!row);
+    }
+  );
 });
 
 // Get bill by number
@@ -751,6 +790,12 @@ app.get('*', (req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
+
+function normalizeBillNumber(bn) {
+  const s = String(bn ?? '').trim();
+  const n = parseInt(s, 10);
+  return Number.isNaN(n) ? s : String(n).padStart(3, '0');
+}
 
 function shutdown() {
   console.log('\n🛑 Gracefully shutting down server...');

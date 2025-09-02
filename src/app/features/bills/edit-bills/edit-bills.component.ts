@@ -35,11 +35,17 @@ export class EditBillsComponent implements OnInit {
   finalAmount = 0;
   manualEmail: string = '';
 
-  clients: any[] = [];
-  selectedClient: any = null;
-
   copiesCount = 1;
   private isPrinting = false;
+  private originalBillNumber = '';
+  private isSaving = false;
+  private normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
+
+  clients: any[] = [];
+  selectedClient: any = null;
 
   constructor(
     private productService: ProductService,
@@ -97,7 +103,6 @@ export class EditBillsComponent implements OnInit {
     }
   }
 
-  /** ===== Load Bill for Editing ===== */
   loadBillForEdit(billNumber: string) {
     this.billsService.getBillByNumber(billNumber).subscribe({
       next: (bill) => {
@@ -107,6 +112,7 @@ export class EditBillsComponent implements OnInit {
         setTimeout(() => this.autoResizeTextarea(), 0);
 
         this.billNumber = bill.billNumber;
+        this.originalBillNumber = this.normalizeBillNumber(this.billNumber);
         this.billDate = bill.billDate;
         this.discount = bill.discount;
         this.totalAmount = bill.totalAmount;
@@ -152,7 +158,7 @@ export class EditBillsComponent implements OnInit {
       this.billItems[index].productName = '(Unknown)';
     }
 
-    this.calculateRowTotal(index);
+  this.calculateRowTotal(index);
   }
 
   /** ===== Calculations ===== */
@@ -165,6 +171,7 @@ export class EditBillsComponent implements OnInit {
     this.totalAmount = this.billItems.reduce((acc, item) => acc + item.total, 0);
     this.calculateFinalAmount();
   }
+
   calculateFinalAmount(): void {
     const discountAmount = this.totalAmount * (this.discount / 100);
     this.finalAmount = this.totalAmount - discountAmount;
@@ -495,6 +502,14 @@ export class EditBillsComponent implements OnInit {
   }
 
   saveBill(): void {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const targetNo = this.normalizeBillNumber(this.billNumber);
+
     const updatedBill = {
       clientName: this.clientName,
       address: this.address,
@@ -502,16 +517,42 @@ export class EditBillsComponent implements OnInit {
       discount: this.discount,
       totalAmount: this.totalAmount,
       finalAmount: this.finalAmount,
-      billItems: this.billItems,
+      billItems: this.billItems
     };
 
-    this.billsService.updateBill(this.billNumber, updatedBill).subscribe({
-      next: () => this.toast.success('Bill updated successfully!'),
-      error: (err) => {
-        console.error('Error updating bill:', err);
-        this.toast.error('Failed to update bill.');
-      },
-    });
+    const doUpdate = () => {
+      this.billsService.updateBill(this.originalBillNumber, { ...updatedBill, billNumber: targetNo }).subscribe({
+        next: () => {
+          this.toast.success('Bill updated successfully!');
+          this.originalBillNumber = targetNo;
+          this.isSaving = false;
+        },
+        error: (err) => {
+          console.error('Error updating bill:', err);
+          this.toast.error('Failed to update bill.');
+          this.isSaving = false;
+        }
+      });
+    };
+
+    if (targetNo !== this.originalBillNumber) {
+      this.billsService.billExists(targetNo).subscribe({
+        next: exists => {
+          if (exists) {
+            this.toast.warn(`Bill ${targetNo} already exists.`);
+            this.isSaving = false;
+          } else {
+            doUpdate();
+          }
+        },
+        error: () => {
+          this.toast.error('Could not verify Bill No. Please try again.');
+          this.isSaving = false;
+        }
+      });
+    } else {
+      doUpdate();
+    }
   }
 
   private htmlToDataUrl(html: string): string {

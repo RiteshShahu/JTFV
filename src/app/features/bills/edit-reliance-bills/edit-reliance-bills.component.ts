@@ -61,6 +61,12 @@ export class EditRelianceBillsComponent implements OnInit {
 
   copiesCount = 1; // number of copies to print
   private isPrinting = false;
+  private isSaving = false;
+  private originalBillNumber = '';
+  private normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
 
   constructor(
     private titleService: Title,
@@ -114,6 +120,7 @@ export class EditRelianceBillsComponent implements OnInit {
         this.clientName  = bill.clientName || this.clientName;
         this.address     = bill.address    || this.address;
         this.billNumber  = bill.billNumber || billNumber;
+        this.originalBillNumber = this.normalizeBillNumber(this.billNumber);
         this.billDate    = bill.billDate   || this.billDate;
         this.totalAmount = Number(bill.totalAmount ?? 0);
 
@@ -585,41 +592,68 @@ export class EditRelianceBillsComponent implements OnInit {
   saveBill(): void {
     this.ensureRelianceDefaults();
 
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const targetNo = this.normalizeBillNumber(this.billNumber);
+
     const sanitizedItems = this.billItems
       .filter(it => it.productId !== null)
       .map(it => ({
         productId: it.productId,
-        productName: it.productName, // includes units if applicable
+        productName: it.productName,
         quantity: Number(it.quantity || 0),
         price: Number(it.price || 0),
         total: Number(it.total || 0),
-        manualTotal: !!it.manualTotal // keep manual total flag
+        manualTotal: !!it.manualTotal
       }));
 
     const payload: any = {
       clientName: this.clientName,
       address: this.address,
-      billNumber: this.billNumber,
+      billNumber: targetNo,
       billDate: this.billDate,
       totalAmount: Number(this.totalAmount) || 0,
       billItems: sanitizedItems,
-      billType: 'reliance' // always tag as Reliance
+      billType: 'reliance'
     };
 
-    const obs = (this.billsService as any).updateBill
-      ? (this.billsService as any).updateBill(this.billNumber, payload)
-      : this.billsService.saveBill(payload);
+    const doUpdate = () => {
+      (this.billsService as any).updateBill?.(this.originalBillNumber, payload).subscribe({
+        next: () => {
+          this.toast.success('Bill updated successfully!');
+          this.originalBillNumber = targetNo;
+          this.isSaving = false;
+        },
+        error: (error: HttpErrorResponse) => {
+          console.error('Error updating bill:', error);
+          this.toast.error('Failed to update bill.');
+          this.isSaving = false;
+        }
+      });
+    };
 
-    obs.subscribe({
-      next: () => {
-        this.toast.success('Bill updated successfully!');
-      },
-      error: (error: HttpErrorResponse) => {
-        console.error('Error updating bill:', error);
-        const msg = `Failed to update bill: ${error.status} ${error.statusText}${error.error?.message ? ' — ' + error.error.message : ''}`;
-        this.toast.error(msg);
-      }
-    });
+    if (targetNo !== this.originalBillNumber) {
+      this.billsService.billExists(targetNo).subscribe({
+        next: exists => {
+          if (exists) {
+            this.toast.warn(`Bill ${targetNo} already exists.`);
+            this.isSaving = false;
+          } else {
+            doUpdate();
+          }
+        },
+        error: () => {
+          this.toast.error('Could not verify Bill No. Please try again.');
+          this.isSaving = false;
+        }
+      });
+    } else {
+      doUpdate();
+    }
   }
 
   autoResize(event: Event): void {

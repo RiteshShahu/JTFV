@@ -12,7 +12,7 @@ type ConfirmMsg = {
   resolve: (v: boolean) => void;
 };
 
-@Component({
+@Component({  
   selector: 'app-toast-container',
   template: `
     <div class="toast-wrap">
@@ -34,9 +34,25 @@ type ConfirmMsg = {
     </div>
   `,
   styles: [`
-    .toast-wrap { position: fixed; right: 16px; bottom: 16px; z-index: 99999; display: grid; gap: 8px; pointer-events: none; }
-    .toast { pointer-events: auto; padding: 10px 14px; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.25);
-             background:#323232; color:#fff; font-size:14px; max-width: 360px; }
+    .toast-wrap {
+      position: fixed;
+      top: 100px;       /* was 70px */
+      right: 20px;
+      z-index: 99999;
+      display: grid;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      padding: 12px 16px;
+      border-radius: 6px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.25);
+      background:#323232;
+      color:#fff;
+      font-size:14px;
+      max-width: 360px;
+    }
     .toast[data-type="success"] { background:#2e7d32; }
     .toast[data-type="error"]   { background:#c62828; }
     .toast[data-type="info"]    { background:#1565c0; }
@@ -50,6 +66,7 @@ type ConfirmMsg = {
     .btn.cancel { background: rgba(0,0,0,.25); color: #fff; }
   `]
 })
+
 export class ToastContainerComponent implements OnInit {
   toasts: ToastMsg[] = [];
   confirms: ConfirmMsg[] = [];

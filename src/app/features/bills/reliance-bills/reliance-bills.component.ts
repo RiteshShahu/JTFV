@@ -50,6 +50,11 @@ export class RelianceBillsComponent implements OnInit {
 
   copiesCount = 1;
   private isPrinting = false;
+  private isSaving = false;
+  private normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
 
   // Ship-to fields (can be edited in UI if you want)
   shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
@@ -594,7 +599,15 @@ export class RelianceBillsComponent implements OnInit {
   }
 
   saveBill(): void {
+    // ensure defaults and blur
     this.ensureRelianceDefaults();
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
+
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const targetNo = this.normalizeBillNumber(this.billNumber);
 
     const sanitizedItems = this.billItems
       .filter(it => it.productId !== null)
@@ -607,27 +620,35 @@ export class RelianceBillsComponent implements OnInit {
         manualTotal: !!it.manualTotal
       }));
 
-    const billData: any = {
+    const payload: any = {
       clientName: this.clientName || '',
       address: this.address || '',
-      billNumber: this.billNumber || '',
+      billNumber: targetNo,
       billDate: this.billDate || '',
       totalAmount: Number(this.totalAmount) || 0,
       billItems: sanitizedItems,
       billType: 'reliance'
     };
 
-    const billNumberParam = this.route.snapshot.paramMap.get('billNumber');
-    const obs = billNumberParam
-      ? (this.billsService as any).updateBill?.(this.billNumber, billData)
-      : (this.billsService as any).saveBill?.(billData);
-
-    obs.subscribe({
-      next: () => this.toast.success('Bill saved successfully!'),
-      error: (error: HttpErrorResponse) => {
-        console.error('Error saving bill:', error);
-        const msg = `Failed to save bill: ${error.status} ${error.statusText}${error.error?.message ? ' — ' + error.error.message : ''}`;
-        this.toast.error(msg);
+    this.billsService.billExists(targetNo).subscribe({
+      next: exists => {
+        if (exists) {
+          this.toast.warn(`Bill ${targetNo} is already saved.`);
+          this.isSaving = false;
+          return;
+        }
+        (this.billsService as any).saveBill?.(payload).subscribe({
+          next: () => { this.toast.success('Bill saved successfully!'); this.isSaving = false; },
+          error: (e: any) => {
+            console.error('Error saving bill:', e);
+            this.toast.error('Failed to save bill.');
+            this.isSaving = false;
+          }
+        });
+      },
+      error: () => {
+        this.toast.error('Could not verify Bill No. Please try again.');
+        this.isSaving = false;
       }
     });
   }

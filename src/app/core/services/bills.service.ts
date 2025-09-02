@@ -44,5 +44,9 @@ export class BillsService {
   
   deleteBill(billNumber: string): Observable<any> {
     return this.http.delete(`http://localhost:3001/api/bills/${billNumber}`);
-  }  
+  }
+
+  billExists(billNumber: string) {
+    return this.http.get<boolean>('http://localhost:3001/api/bills/exists', { params: { billNumber }});
+  }
 }

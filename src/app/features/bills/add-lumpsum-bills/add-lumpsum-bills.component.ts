@@ -27,12 +27,13 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
   copiesCount = 2;
   private isPrinting = false;
+  private isSaving = false;          // prevent double-click saves
 
   constructor(
     private http: HttpClient,
     private billsService: BillsService,
     private titleService: Title,
-    private toast: ToastService   // ⬅️ inject toast
+    private toast: ToastService
   ) {}
 
   ngOnInit(): void {
@@ -86,27 +87,58 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     this.finalAmount = this.amount - this.marginValue;
   }
 
+  // ------- SAVE with duplicate Bill No protection -------
   saveBill(): void {
-    const active = document.activeElement as HTMLElement;
-    if (active && active.tagName === 'TEXTAREA') active.blur();
+    // flush any focused input/textarea
+    const active = document.activeElement as HTMLElement | null;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
-    const billData = {
-      clientName: this.clientName,
-      address: this.address,
-      billNumber: this.billNumber,
-      billDate: this.billDate,
-      discount: this.discount,
-      discountAmount: this.marginValue,
-      totalAmount: this.amount,
-      finalAmount: this.finalAmount,
-      description: this.description,
-      billItems: [],
-      billType: 'lumpsum'
-    };
+    if (!this.billNumber?.trim()) {
+      this.toast.warn('Bill No is required');
+      return;
+    }
 
-    this.billsService.saveBill(billData).subscribe({
-      next: () => this.toast.success('Bill saved successfully!'),
-      error: () => this.toast.error('Failed to save bill. Please try again.')
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    // Check if bill no already exists before saving
+    this.billsService.billExists(this.billNumber).subscribe({
+      next: (exists: boolean) => {
+        if (exists) {
+          this.toast.warn(`Bill ${this.billNumber} is already saved.`);
+          this.isSaving = false;
+          return;
+        }
+
+        const billData = {
+          clientName: this.clientName,
+          address: this.address,
+          billNumber: this.billNumber,
+          billDate: this.billDate,
+          discount: this.discount,
+          discountAmount: this.marginValue,
+          totalAmount: this.amount,
+          finalAmount: this.finalAmount,
+          description: this.description,
+          billItems: [],
+          billType: 'lumpsum'
+        };
+
+        this.billsService.saveBill(billData).subscribe({
+          next: () => {
+            this.toast.success('Bill saved successfully!');
+            this.isSaving = false;
+          },
+          error: () => {
+            this.toast.error('Failed to save bill. Please try again.');
+            this.isSaving = false;
+          }
+        });
+      },
+      error: () => {
+        this.toast.error('Could not verify Bill No. Please try again.');
+        this.isSaving = false;
+      }
     });
   }
 
@@ -116,11 +148,9 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
     this.isPrinting = true;
     try {
-      // ensure blur so ngModel flushes
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
-      // quick validation (non-modal)
       if (!this.clientName && !this.address && !this.description && !this.amount) {
         this.toast.warn('Nothing to print. Please fill bill details.');
         return;
@@ -161,13 +191,11 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     } finally {
       this.isPrinting = false;
 
-      // Local nudge
       setTimeout(() => {
         try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
         try { window.focus(); } catch {}
       }, 40);
 
-      // Ask main to do a HARD re-focus (minimize/restore + AOT dance)
       try { (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
