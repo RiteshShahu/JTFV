@@ -30,15 +30,12 @@
   gap: 12px 16px;
   margin-bottom: 16px;
 }
-
 .email-box .field {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-.email-box .field--full {
-  grid-column: 1 / -1;
-}
+.email-box .field--full { grid-column: 1 / -1; }
 
 .label {
   font-size: 12px;
@@ -46,7 +43,7 @@
   color: #607d8b;
 }
 
-/* Inputs (match bills page) */
+/* Inputs */
 .form-control,
 .table input[type="text"],
 .table input[type="number"],
@@ -59,11 +56,10 @@
   border: 1px solid #ccd6dd;
   border-radius: 6px;
   background-color: #f7f9fc;
-  transition: border-color .2s ease, background-color .2s ease;
+  transition: border-color .2s ease, background-color .2s ease, box-shadow .15s ease;
   outline: none;
   box-sizing: border-box;
 }
-
 .form-control:focus,
 .table input:focus,
 .table select:focus,
@@ -71,15 +67,15 @@
 .email-box textarea:focus {
   border-color: #3f51b5;
   background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(63,81,181,0.12);
 }
-
 .form-control[disabled] {
   background: #f1f3f5;
   color: #6b7280;
   cursor: not-allowed;
 }
 
-/* Table (reuse bills emphasis) */
+/* Table */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -89,7 +85,6 @@
   border-radius: 10px;
   overflow: hidden;
 }
-
 .table th,
 .table td {
   border: 1px solid #e5e7eb;
@@ -97,25 +92,18 @@
   text-align: left;
   vertical-align: middle;
 }
-
 .table thead th {
   background: #f9fafb;
   font-weight: 700;
   color: #2c3e50;
 }
-
-.table tbody tr:hover {
-  background-color: #f4f6f8;
-}
-
+.table tbody tr:hover { background-color: #f4f6f8; }
 .table .muted { color: #6b7280; }
 .table .right { text-align: right; }
 .table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 
-/* Product cell width consistency */
-.product-cell .form-control {
-  min-width: 240px;
-}
+/* Product cell width */
+.product-cell .form-control { min-width: 240px; }
 
 /* Row actions */
 .row-actions {
@@ -124,11 +112,13 @@
   gap: 10px;
   margin-top: 12px;
 }
-
 .spacer { flex: 1; }
 
-/* Buttons (match bills buttons) */
+/* General buttons */
 .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 14px;
   font-size: 14px;
   font-weight: 600;
@@ -137,10 +127,11 @@
   background: #f3f4f6;
   color: #111827;
   cursor: pointer;
-  transition: background-color .2s ease, transform .15s ease, filter .15s ease;
+  transition: background-color .2s ease, transform .15s ease, filter .15s ease, box-shadow .15s ease;
 }
-
 .btn:hover { filter: brightness(0.98); transform: translateY(-1px); }
+.btn:active { transform: translateY(0); }
+.btn:focus-visible { outline: 2px solid #3f51b5; outline-offset: 2px; }
 
 .btn.primary {
   background: #3f51b5;
@@ -149,21 +140,40 @@
 }
 .btn.primary:hover { background: #35449c; }
 
-/* Link buttons (remove, etc.) */
-.link.danger {
-  color: #b91c1c;
-  background: transparent;
-  border: none;
-  padding: 6px 8px;
+/* Danger (Delete) button - smaller & compact */
+.btn-danger {
+  background: #e53935;
+  border: 1px solid #e53935;
+  color: #fff;
+  font-size: 13px;
   font-weight: 600;
-  cursor: pointer;
+  padding: 6px 14px;   /* balanced padding */
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;    /* keeps it centered inside cell */
+  height: 32px;        /* fixed height for consistency */
 }
-.link.danger:hover { text-decoration: underline; }
+
+.btn-danger:hover { background: #d32f2f; }
+.btn-danger:active { background: #c62828; }
+.btn-danger:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.table td.right {
+  display: flex;
+  justify-content: flex-end; /* keep it on the right */
+  align-items: center;       /* vertical centering */
+  gap: 8px;                  /* if you add more actions later */
+}
 
 /* Table wrapper scrolling */
 .table-wrap { overflow: auto; }
 
-/* Responsive tweaks */
+/* Responsive */
 @media (max-width: 920px) {
   .email-box { grid-template-columns: 1fr; }
   .product-cell .form-control { min-width: 100%; }
