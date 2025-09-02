@@ -4,6 +4,8 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { ProductService, Name } from 'src/app/core/services/products.service';
 import { BillsService } from 'src/app/core/services/bills.service';
+// ⬇️ update path if needed
+import { ToastService } from 'src/app/core/services/toast.service';
 
 interface BillItem {
   productId: number | null;
@@ -38,7 +40,6 @@ export class BillsComponent implements OnInit {
   manualEmail: string = '';
 
   copiesCount = 1;
-  // prevent double-prints
   private isPrinting = false;
 
   constructor(
@@ -46,7 +47,8 @@ export class BillsComponent implements OnInit {
     private productService: ProductService,
     private billsService: BillsService,
     private route: ActivatedRoute,
-    private http: HttpClient
+    private http: HttpClient,
+    private toast: ToastService   // ⬅️ toast
   ) {}
 
   ngOnInit(): void {
@@ -255,6 +257,7 @@ export class BillsComponent implements OnInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
+      this.toast.error('Unable to create print frame.');
       return;
     }
     doc.open();
@@ -286,7 +289,7 @@ export class BillsComponent implements OnInit {
         }));
 
       if (validItems.length === 0) {
-        console.warn('No valid items to print. Please check quantity and price fields.');
+        this.toast.warn('No valid items to print.');
         return;
       }
 
@@ -294,10 +297,8 @@ export class BillsComponent implements OnInit {
       const discountAmount = totalAmount * (this.discount / 100);
       const finalAmount = totalAmount - discountAmount;
 
-      // NEW: clamp copies (1..50)
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
-      // NEW: build HTML that repeats the page N times with page breaks
       const html = this.buildPrintHtmlMulti(validItems, {
         clientName: this.clientName,
         address: this.address,
@@ -312,32 +313,32 @@ export class BillsComponent implements OnInit {
       const el = (window as any).electron;
 
       if (el?.printCanonA4) {
-        // Pass copies to Electron (if your main handler supports it)
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
+          this.toast.error('Print failed. Check printer and try again.');
+        } else {
+          this.toast.success('Sent to printer.');
         }
       } else {
-        // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
+        this.toast.info('Opening system print dialog…');
       }
     } catch (err: any) {
       console.error('Print failed:', err);
+      this.toast.error('Unexpected print error.');
     } finally {
       this.isPrinting = false;
 
-      // Local nudge
       setTimeout(() => {
         try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
         try { window.focus(); } catch {}
       }, 40);
 
-      // Ask main to do a HARD re-focus (minimize/restore + AOT dance)
       try { (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
 
-  // NEW: multi-page builder (wraps your existing single-page template)
   private buildPrintHtmlMulti(
     items: Array<{ productId: number | null; productName: string; quantity: number; price: number; total?: number }>,
     meta: {
@@ -351,10 +352,7 @@ export class BillsComponent implements OnInit {
     },
     copies: number
   ): string {
-    // reuse your existing single-page builder to get the inner <body> content
     const single = this.buildPrintHtml(items, meta);
-
-    // extract inside <body>...</body> (quick & safe enough for our controlled template)
     const match = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyContent = match ? match[1] : single;
 
@@ -402,11 +400,11 @@ export class BillsComponent implements OnInit {
       item => item.productId !== null && item.productName && item.quantity > 0 && item.price > 0
     );
     if (validItems.length === 0) {
-      alert('No valid items to email.');
+      this.toast.warn('No valid items to email.');
       return;
     }
     if (!this.manualEmail || !this.manualEmail.includes('@')) {
-      alert('Please enter a valid email address');
+      this.toast.warn('Please enter a valid email address');
       return;
     }
 
@@ -430,18 +428,18 @@ export class BillsComponent implements OnInit {
       billNumber: this.billNumber,
       billDate: this.billDate,
       discount: this.discount,
-      totalAmount: this.totalAmount, // keep UI totals
-      finalAmount: this.finalAmount, // keep UI totals
+      totalAmount: this.totalAmount,
+      finalAmount: this.finalAmount,
       billItems: validItems,
       email: this.manualEmail,
       pdfHtml
     };
 
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => alert('Email Sent!'),
+      next: () => this.toast.success('Email sent!'),
       error: (err) => {
         console.error('Email failed:', err);
-        alert('Failed to send email. Please try again.');
+        this.toast.error('Failed to send email. Please try again.');
       }
     });
   }
@@ -459,9 +457,9 @@ export class BillsComponent implements OnInit {
     };
 
     this.billsService.saveBill(billData).subscribe({
-      next: () => alert('Bill saved successfully!'),
+      next: () => this.toast.success('Bill saved successfully!'),
       error: (error: HttpErrorResponse) => {
-        alert('Failed to save bill. Please try again.');
+        this.toast.error('Failed to save bill. Please try again.');
         console.error('Error saving bill:', error);
       }
     });
@@ -487,7 +485,6 @@ export class BillsComponent implements OnInit {
     }
   }
 
-  /** Convert HTML into data URL for Electron printing (UTF-8, no base64) */
   private htmlToDataUrl(html: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }

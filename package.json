@@ -45,12 +45,14 @@
     "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7",
     "tslib": "^2.3.0",
+    "xlsx": "^0.18.5",
     "zone.js": "~0.13.0"
   },
   "devDependencies": {
     "@angular-devkit/build-angular": "^16.0.5",
     "@angular/cli": "^16.2.16",
     "@angular/compiler-cli": "^16.0.0",
+    "@types/file-saver": "^2.0.7",
     "@types/jasmine": "~4.3.0",
     "electron": "^35.2.1",
     "electron-builder": "^26.0.12",

@@ -4,6 +4,7 @@ import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
 import { ProductService, Name } from 'src/app/core/services/products.service';
 import { BillsService } from 'src/app/core/services/bills.service';
+import { ToastService } from 'src/app/core/services/toast.service';
 
 interface BillItem {
   productId: number | null;
@@ -50,11 +51,21 @@ export class RelianceBillsComponent implements OnInit {
   copiesCount = 1;
   private isPrinting = false;
 
+  // Ship-to fields (can be edited in UI if you want)
+  shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
+  shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+
+  // Constants
+  private readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
+  private readonly RELIANCE_ADDR =
+    'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
+
   constructor(
     private titleService: Title,
     private productService: ProductService,
     private billsService: BillsService,
     private route: ActivatedRoute,
+    private toast: ToastService,
     private http: HttpClient
   ) {}
 
@@ -94,15 +105,6 @@ export class RelianceBillsComponent implements OnInit {
       error: () => {}
     });
   }
-
-  // Ship-to fields (can be edited in UI if you want)
-  shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
-  shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
-
-  // Constants
-  private readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
-  private readonly RELIANCE_ADDR =
-    'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
 
   // Ensure client fields are always present
   private ensureRelianceDefaults(): void {
@@ -166,7 +168,7 @@ export class RelianceBillsComponent implements OnInit {
       },
       error: err => {
         console.error('Failed to load bill for edit:', err);
-        alert('Could not load the bill.');
+        this.toast.error('Could not load the bill.');
       }
     });
   }
@@ -489,7 +491,7 @@ export class RelianceBillsComponent implements OnInit {
         });
 
       if (!validItems.length) {
-        console.warn('No valid items to print.');
+        this.toast.warn('No valid items to print.');
         return;
       }
 
@@ -512,15 +514,18 @@ export class RelianceBillsComponent implements OnInit {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          // (Optional) show a non-blocking toast/snackbar in your UI here
+          this.toast.error('Print failed. Check printer and try again.');
+        } else {
+          this.toast.success('Sent to printer.');
         }
       } else {
         // Browser fallback: HTML already contains N pages
         await this.printHtmlInHiddenIframe(html);
+        this.toast.info('Opening system print dialog…');
       }
     } catch (err) {
       console.error('Print failed:', err);
-      // (Optional) show a non-blocking toast/snackbar in your UI here
+      this.toast.error('Unexpected print error.');
     } finally {
       this.isPrinting = false;
 
@@ -542,11 +547,11 @@ export class RelianceBillsComponent implements OnInit {
       it => it.productId !== null && (it.productName || this.namesWithUnitsMap[it.productId!]) && it.quantity > 0
     );
     if (!validItems.length) {
-      alert('No valid items to email. Please add at least one valid item.');
+      this.toast.warn('No valid items to email. Please add at least one valid item.');
       return;
     }
     if (!this.manualEmail || !this.manualEmail.includes('@')) {
-      alert('Please enter a valid email address');
+      this.toast.warn('Please enter a valid email address.');
       return;
     }
 
@@ -580,10 +585,10 @@ export class RelianceBillsComponent implements OnInit {
     };
 
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => alert('Email Sent!'),
+      next: () => this.toast.success('Email Sent!'),
       error: (err) => {
         console.error('Email failed:', err);
-        alert('Failed to send email. Please try again.');
+        this.toast.error('Failed to send email. Please try again.');
       }
     });
   }
@@ -618,10 +623,11 @@ export class RelianceBillsComponent implements OnInit {
       : (this.billsService as any).saveBill?.(billData);
 
     obs.subscribe({
-      next: () => alert('Bill saved successfully!'),
+      next: () => this.toast.success('Bill saved successfully!'),
       error: (error: HttpErrorResponse) => {
         console.error('Error saving bill:', error);
-        alert(`Failed to save bill: ${error.status} ${error.statusText}${error.error?.message ? ' — ' + error.error.message : ''}`);
+        const msg = `Failed to save bill: ${error.status} ${error.statusText}${error.error?.message ? ' — ' + error.error.message : ''}`;
+        this.toast.error(msg);
       }
     });
   }
@@ -658,7 +664,7 @@ export class RelianceBillsComponent implements OnInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-      console.warn('Unable to create print frame.');
+      this.toast.error('Unable to create print frame.');
       return;
     }
 

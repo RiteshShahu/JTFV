@@ -15,7 +15,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '10mb' }));
 
 const userDataPath = process.env.USER_DATA_PATH || path.join(__dirname, 'userdata');
 const dbPath = path.join(userDataPath, 'database.db');
@@ -661,6 +661,70 @@ J.T. Fruits & Vegetables`;
     if (browser) {
       try { await browser.close(); } catch {}
     }
+  }
+});
+
+// ---- mail transporter (reuse everywhere) ----
+function createMailTransporter() {
+  // Prefer explicit SMTP if you have it; keep Gmail fallback
+  if (process.env.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: !!process.env.SMTP_SECURE, // '1' to force true
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+  // Gmail (needs App Password)
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.MAIL_USER || 'jkumarshahu5@gmail.com',
+      pass: process.env.MAIL_PASS || 'vobd eiax vdrd yvbh',
+    },
+  });
+}
+const mailer = createMailTransporter();
+
+// ==================== EMAIL: PRICE CHANGE (XLSX attachment) ====================
+app.post('/email/price-change', async (req, res) => {
+  try {
+    const {
+      to,              // string[] of recipients
+      subject,         // string
+      message,         // plain text body
+      filename,        // e.g. 'New Product Price Change.xlsx'
+      fileBase64       // base64 string (no data: prefix)
+    } = req.body || {};
+
+    if (!Array.isArray(to) || to.length === 0) {
+      return res.status(400).json({ message: 'Missing recipients array "to"' });
+    }
+    if (!fileBase64 || !filename) {
+      return res.status(400).json({ message: 'Missing fileBase64 or filename' });
+    }
+
+    await mailer.sendMail({
+      from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
+      to: to.join(','),
+      subject: subject || 'Product Price Change',
+      text: message || 'Please see the attached price change sheet.',
+      attachments: [
+        {
+          filename,
+          content: Buffer.from(fileBase64, 'base64'),
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        },
+      ],
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Email /email/price-change failed:', err);
+    res.status(500).json({ message: 'Failed to send email' });
   }
 });
 

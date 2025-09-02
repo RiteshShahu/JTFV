@@ -2,6 +2,7 @@ import { Component } from '@angular/core';
 import { NgForm } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ClientService } from 'src/app/core/services/client.service';
+import { ToastService } from 'src/app/core/services/toast.service';
 
 @Component({
   selector: 'app-add-merchant',
@@ -15,6 +16,7 @@ export class AddMerchantComponent {
   selectedArea: string = '';
   selectedSubArea: string = '';
   subAreaOptions: string[] = [];
+  saving = false;
 
   areaToSubareas: { [key: string]: string[] } = {
     'Andheri (East)': ['Marol', 'Saki Naka', 'Chakala', 'JB Nagar'],
@@ -77,8 +79,11 @@ export class AddMerchantComponent {
     return Object.keys(this.areaToSubareas);
   }
 
-
-  constructor(private clientService: ClientService, private router: Router) {}
+  constructor(
+    private clientService: ClientService,
+    private router: Router,
+    private toast: ToastService
+  ) {}
 
   onAreaChange(): void {
     this.subAreaOptions = this.areaToSubareas[this.selectedArea] || [];
@@ -86,23 +91,41 @@ export class AddMerchantComponent {
   }
 
   onSubmit(form: NgForm): void {
-    console.log('Form submitted', form.value);
-
-    if (form.valid) {
-      const now = new Date();
-      const clientData = {
-        ...form.value,
-        area: this.selectedArea,
-        subArea: this.selectedSubArea,
-        dateOfEntry: now.toLocaleDateString(),
-        entryTime: now.toLocaleTimeString()
-      };
-
-      this.clientService.saveClient(clientData).subscribe({
-        next: () => this.router.navigate(['/dashboard']),
-        error: err => console.error('Failed to save client:', err)
-      });
+    if (!form.valid) {
+      this.toast.warn('Please fill all required fields.');
+      return;
     }
+    if (!this.selectedArea) {
+      this.toast.warn('Please select an Area.');
+      return;
+    }
+    if (this.subAreaOptions.length && !this.selectedSubArea) {
+      this.toast.warn('Please select a Sub Area.');
+      return;
+    }
+
+    const now = new Date();
+    const clientData = {
+      ...form.value,
+      area: this.selectedArea,
+      subArea: this.selectedSubArea,
+      dateOfEntry: now.toLocaleDateString(),
+      entryTime: now.toLocaleTimeString()
+    };
+
+    this.saving = true;
+    this.clientService.saveClient(clientData).subscribe({
+      next: () => {
+        this.toast.success('Merchant added successfully!');
+        this.saving = false;
+        this.router.navigate(['/dashboard']);
+      },
+      error: (err) => {
+        console.error('Failed to save client:', err);
+        this.toast.error(err.error?.message || 'Failed to save merchant. Please try again.');
+        this.saving = false;
+      }
+    });
   }
 
   backToHome(): void {

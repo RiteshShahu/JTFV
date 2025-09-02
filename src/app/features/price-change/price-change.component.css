@@ -1,0 +1,170 @@
+/* Base & container (reuse bills page vibe) */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 32px 24px;
+  font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #fff;
+  color: #2c3e50;
+}
+
+.pc-container .page-title {
+  margin: 0 0 16px 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #333;
+}
+
+/* Cards (like bills tables/blocks) */
+.card {
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  padding: 16px;
+}
+
+/* Email box layout */
+.email-box {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.email-box .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.email-box .field--full {
+  grid-column: 1 / -1;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #607d8b;
+}
+
+/* Inputs (match bills page) */
+.form-control,
+.table input[type="text"],
+.table input[type="number"],
+.table select,
+.email-box input,
+.email-box textarea {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ccd6dd;
+  border-radius: 6px;
+  background-color: #f7f9fc;
+  transition: border-color .2s ease, background-color .2s ease;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.form-control:focus,
+.table input:focus,
+.table select:focus,
+.email-box input:focus,
+.email-box textarea:focus {
+  border-color: #3f51b5;
+  background-color: #ffffff;
+}
+
+.form-control[disabled] {
+  background: #f1f3f5;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Table (reuse bills emphasis) */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin-top: 8px;
+  background-color: #ffffff;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table th,
+.table td {
+  border: 1px solid #e5e7eb;
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.table thead th {
+  background: #f9fafb;
+  font-weight: 700;
+  color: #2c3e50;
+}
+
+.table tbody tr:hover {
+  background-color: #f4f6f8;
+}
+
+.table .muted { color: #6b7280; }
+.table .right { text-align: right; }
+.table .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* Product cell width consistency */
+.product-cell .form-control {
+  min-width: 240px;
+}
+
+/* Row actions */
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.spacer { flex: 1; }
+
+/* Buttons (match bills buttons) */
+.btn {
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  color: #111827;
+  cursor: pointer;
+  transition: background-color .2s ease, transform .15s ease, filter .15s ease;
+}
+
+.btn:hover { filter: brightness(0.98); transform: translateY(-1px); }
+
+.btn.primary {
+  background: #3f51b5;
+  border-color: #3f51b5;
+  color: #fff;
+}
+.btn.primary:hover { background: #35449c; }
+
+/* Link buttons (remove, etc.) */
+.link.danger {
+  color: #b91c1c;
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.link.danger:hover { text-decoration: underline; }
+
+/* Table wrapper scrolling */
+.table-wrap { overflow: auto; }
+
+/* Responsive tweaks */
+@media (max-width: 920px) {
+  .email-box { grid-template-columns: 1fr; }
+  .product-cell .form-control { min-width: 100%; }
+}

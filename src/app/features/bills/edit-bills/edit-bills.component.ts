@@ -3,6 +3,8 @@ import { ActivatedRoute } from '@angular/router';
 import { Title } from '@angular/platform-browser';
 import { ProductService, Name } from 'src/app/core/services/products.service';
 import { BillsService } from 'src/app/core/services/bills.service';
+// ⬇️ update path if needed
+import { ToastService } from 'src/app/core/services/toast.service';
 
 interface BillItem {
   productId: number | null;
@@ -43,7 +45,8 @@ export class EditBillsComponent implements OnInit {
     private productService: ProductService,
     private billsService: BillsService,
     private route: ActivatedRoute,
-    private titleService: Title
+    private titleService: Title,
+    private toast: ToastService   // ⬅️ toast
   ) {}
 
   ngOnInit(): void {
@@ -73,7 +76,7 @@ export class EditBillsComponent implements OnInit {
     });
   }
 
-  /** ========== Helpers for Textarea Resize ========== */
+  /** ===== Textarea Resize ===== */
   autoResize(event: Event): void {
     const textarea = event.target as HTMLTextAreaElement;
     textarea.style.height = 'auto';
@@ -94,7 +97,7 @@ export class EditBillsComponent implements OnInit {
     }
   }
 
-  /** ========== Load Bill for Editing ========== */
+  /** ===== Load Bill for Editing ===== */
   loadBillForEdit(billNumber: string) {
     this.billsService.getBillByNumber(billNumber).subscribe({
       next: (bill) => {
@@ -121,12 +124,12 @@ export class EditBillsComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to load bill:', err);
-        alert('Failed to load bill.');
+        this.toast.error('Failed to load bill.');
       },
     });
   }
 
-  /** ========== Client & Product Handling ========== */
+  /** ===== Client & Product Handling ===== */
   onClientChange(): void {
     if (this.selectedClient) {
       const c = this.selectedClient;
@@ -152,7 +155,7 @@ export class EditBillsComponent implements OnInit {
     this.calculateRowTotal(index);
   }
 
-  /** ========== Calculations ========== */
+  /** ===== Calculations ===== */
   calculateRowTotal(index: number): void {
     const item = this.billItems[index];
     item.total = (item.quantity || 0) * (item.price || 0);
@@ -167,7 +170,7 @@ export class EditBillsComponent implements OnInit {
     this.finalAmount = this.totalAmount - discountAmount;
   }
 
-  /** ========== Keyboard Row Add (Tab) ========== */
+  /** ===== Keyboard Row Add (Tab) ===== */
   onPriceKeydown(event: KeyboardEvent, index: number): void {
     if (event.key === 'Tab' && !event.shiftKey) {
       event.preventDefault();
@@ -198,6 +201,7 @@ export class EditBillsComponent implements OnInit {
     }
   }
 
+  /** ===== Printing ===== */
   private async printHtmlInHiddenIframe(html: string): Promise<void> {
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
@@ -210,8 +214,8 @@ export class EditBillsComponent implements OnInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-    console.warn('Unable to create print frame.');
-    return;
+      this.toast.error('Unable to create print frame.');
+      return;
     }
 
     doc.open();
@@ -220,9 +224,7 @@ export class EditBillsComponent implements OnInit {
 
     const waitForAssets = async () => {
       const promises: Promise<unknown>[] = [];
-      // Wait for fonts
       if ((doc as any).fonts?.ready) promises.push((doc as any).fonts.ready);
-      // Wait for images
       Array.from(doc.images || []).forEach((img) => {
         if (!img.complete) {
           promises.push(
@@ -252,7 +254,6 @@ export class EditBillsComponent implements OnInit {
     return d.toLocaleDateString('en-GB'); // dd/mm/yyyy
   }
 
-  /** ========== PRINT HTML TEMPLATE ========== */
   private buildPrintHtml(
     items: Array<{ productId: number | null; productName: string; quantity: number; price: number; total?: number }>,
     meta: {
@@ -326,11 +327,9 @@ export class EditBillsComponent implements OnInit {
     </html>`;
   }
 
-  /** ========== PRINT BILL ========== */
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    // optional: flush ngModel
     try {
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
@@ -352,7 +351,7 @@ export class EditBillsComponent implements OnInit {
         }));
 
       if (validItems.length === 0) {
-        console.warn('No valid items to print. Please check quantity and price fields.');
+        this.toast.warn('No valid items to print.');
         return;
       }
 
@@ -378,18 +377,20 @@ export class EditBillsComponent implements OnInit {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          // show non-blocking toast if desired
+          this.toast.error('Print failed. Check printer and try again.');
+        } else {
+          this.toast.success('Sent to printer.');
         }
       } else {
         await this.printHtmlInHiddenIframe(html);
+        this.toast.info('Opening system print dialog…');
       }
     } catch (err: any) {
       console.error('Print failed:', err);
-      // show non-blocking toast if desired
+      this.toast.error('Unexpected print error.');
     } finally {
       this.isPrinting = false;
 
-      // gentle refocus
       setTimeout(() => {
         try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
         try { window.focus(); } catch {}
@@ -398,7 +399,6 @@ export class EditBillsComponent implements OnInit {
     }
   }
 
-  // NEW: Wrapper that repeats your single-page template with page breaks
   private buildPrintHtmlMulti(
     items: Array<{ productId: number | null; productName: string; quantity: number; price: number; total?: number }>,
     meta: {
@@ -412,9 +412,7 @@ export class EditBillsComponent implements OnInit {
     },
     copies: number
   ): string {
-    const single = this.buildPrintHtml(items, meta); // reuse your existing builder
-
-    // Extract the <body> content from the single-page HTML
+    const single = this.buildPrintHtml(items, meta);
     const match = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
     const bodyContent = match ? match[1] : single;
 
@@ -443,17 +441,17 @@ export class EditBillsComponent implements OnInit {
     `;
   }
   
-  /** ========== EMAIL BILL ========== */
+  /** ===== Email & Save ===== */
   emailBill(): void {
     const validItems = this.billItems.filter(
       (item) => item.productId !== null && item.productName && item.quantity > 0 && item.price > 0
     );
     if (validItems.length === 0) {
-      alert('No valid items to email.');
+      this.toast.warn('No valid items to email.');
       return;
     }
     if (!this.manualEmail || !this.manualEmail.includes('@')) {
-      alert('Please enter a valid email address');
+      this.toast.warn('Please enter a valid email address');
       return;
     }
 
@@ -488,15 +486,14 @@ export class EditBillsComponent implements OnInit {
     };
 
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => alert('Email Sent!'),
+      next: () => this.toast.success('Email sent!'),
       error: (err) => {
         console.error('Email failed:', err);
-        alert('Failed to send email.');
+        this.toast.error('Failed to send email.');
       },
     });
   }
 
-  /** ========== SAVE BILL ========== */
   saveBill(): void {
     const updatedBill = {
       clientName: this.clientName,
@@ -509,15 +506,14 @@ export class EditBillsComponent implements OnInit {
     };
 
     this.billsService.updateBill(this.billNumber, updatedBill).subscribe({
-      next: () => alert('Bill updated successfully!'),
+      next: () => this.toast.success('Bill updated successfully!'),
       error: (err) => {
-        alert('Failed to update bill.');
         console.error('Error updating bill:', err);
+        this.toast.error('Failed to update bill.');
       },
     });
   }
 
-  /** Convert HTML into data URL for Electron printing (UTF-8, no base64) */
   private htmlToDataUrl(html: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }

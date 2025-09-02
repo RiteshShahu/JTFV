@@ -16,7 +16,7 @@ import { EditLumpsumBillsComponent } from './features/bills/edit-lumpsum-bills/e
 import { RelianceBillsComponent } from './features/bills/reliance-bills/reliance-bills.component';
 import { EditRelianceBillsComponent } from './features/bills/edit-reliance-bills/edit-reliance-bills.component';
 import { LabelPrintHistoryComponent } from './features/barcode/label-print-history/label-print-history.component';
-
+import { PriceChangeComponent } from './features/price-change/price-change.component';
 
 const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -35,6 +35,7 @@ const routes: Routes = [
   { path: 'reliance-bills', component: RelianceBillsComponent },
   { path: 'edit-reliance-bills/:billNumber', component: EditRelianceBillsComponent },
   { path: 'label-history', component: LabelPrintHistoryComponent },
+  { path: 'price-change', component: PriceChangeComponent},
   { path: '', redirectTo: '/login', pathMatch: 'full' },
 ];
 

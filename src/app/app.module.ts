@@ -31,6 +31,8 @@ import { EditLumpsumBillsComponent } from './features/bills/edit-lumpsum-bills/e
 import { RelianceBillsComponent } from './features/bills/reliance-bills/reliance-bills.component';
 import { EditRelianceBillsComponent } from './features/bills/edit-reliance-bills/edit-reliance-bills.component';
 import { LabelPrintHistoryComponent } from './features/barcode/label-print-history/label-print-history.component';
+import { PriceChangeComponent } from './features/price-change/price-change.component';
+import { ToastContainerComponent } from './features/toast-container/toast-container.component';
 
 
 @NgModule({
@@ -69,7 +71,9 @@ import { LabelPrintHistoryComponent } from './features/barcode/label-print-histo
     EditLumpsumBillsComponent,
     RelianceBillsComponent,
     EditRelianceBillsComponent,
-    LabelPrintHistoryComponent
+    LabelPrintHistoryComponent,
+    PriceChangeComponent,
+    ToastContainerComponent,
   ],
 
   providers: [],

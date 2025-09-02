@@ -1,0 +1,88 @@
+<app-navbar class="no-print"></app-navbar>
+
+<div class="container pc-container">
+  <h2 class="page-title">Price Change Sheet</h2>
+
+  <div class="email-box card">
+    <label class="field">
+      <span class="label">To (comma separated):</span>
+      <input type="text" class="form-control" [(ngModel)]="toList" placeholder="niraj@..., sunil@..." />
+    </label>
+    <label class="field">
+      <span class="label">Subject:</span>
+      <input type="text" class="form-control" [(ngModel)]="subject" />
+    </label>
+    <label class="field field--full">
+      <span class="label">Message:</span>
+      <textarea rows="3" class="form-control" [(ngModel)]="message"></textarea>
+    </label>
+  </div>
+
+  <div class="table-wrap card">
+    <table class="table grid">
+      <thead>
+        <tr>
+          <th style="width:64px;">No</th>
+          <th style="width:160px;">Barcode</th>
+          <th>Product</th>
+          <th style="width:140px;">Old Price</th>
+          <th style="width:160px;">New Price</th>
+          <th style="width:200px;">Margin</th>
+          <th style="width:110px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- inside your <tbody> row -->
+        <tr *ngFor="let r of rows; let i = index">
+        <td>{{ i + 1 }}</td>
+
+        <td>
+            <input type="text" class="form-control" [value]="r.barcode || ''" disabled />
+        </td>
+
+        <td class="product-cell">
+            <!-- ADD #productSelect -->
+            <select #productSelect class="form-control"
+                    [(ngModel)]="r.productId"
+                    (change)="onProductChange(r)">
+            <option [ngValue]="null">Select</option>
+            <option *ngFor="let p of products" [ngValue]="p.id">
+                {{ p.name }}{{ p.units ? ' ' + p.units : '' }}
+            </option>
+            </select>
+        </td>
+
+        <td>
+            <input type="number" class="form-control" [value]="r.oldPrice ?? ''" disabled />
+        </td>
+
+        <td>
+            <!-- ADD #newPriceInput and (keydown) -->
+            <input #newPriceInput
+                type="number"
+                min="0" step="0.01"
+                class="form-control"
+                [(ngModel)]="r.newPrice"
+                (keydown)="onNewPriceKeydown($event, i)"
+                placeholder="0.00" />
+        </td>
+
+        <td class="mono">
+            {{ r.newPrice ? ((r.newPrice * 0.85) | number:'1.2-2') : '' }}
+        </td>
+
+        <td class="right">
+            <button class="link danger" (click)="removeRow(i)" tabindex="-1">Remove</button>
+        </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="row-actions">
+      <button class="btn" (click)="addRow()">+ Add Row</button>
+      <div class="spacer"></div>
+      <button class="btn" (click)="downloadExcel()">Export to Excel</button>
+      <button class="btn primary" (click)="sendEmail()">Send Email</button>
+    </div>
+  </div>
+</div>

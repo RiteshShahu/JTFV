@@ -2,6 +2,7 @@ import { Component, OnInit, AfterViewInit, ElementRef, ViewChild } from '@angula
 import { HttpClient } from '@angular/common/http';
 import { Title } from '@angular/platform-browser';
 import { BillsService } from 'src/app/core/services/bills.service';
+import { ToastService } from 'src/app/core/services/toast.service';
 
 @Component({
   selector: 'app-add-lumpsum-bills',
@@ -30,7 +31,8 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
   constructor(
     private http: HttpClient,
     private billsService: BillsService,
-    private titleService: Title
+    private titleService: Title,
+    private toast: ToastService   // ⬅️ inject toast
   ) {}
 
   ngOnInit(): void {
@@ -103,8 +105,8 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     };
 
     this.billsService.saveBill(billData).subscribe({
-      next: () => alert('Bill saved successfully!'),
-      error: () => alert('Failed to save bill. Please try again.')
+      next: () => this.toast.success('Bill saved successfully!'),
+      error: () => this.toast.error('Failed to save bill. Please try again.')
     });
   }
 
@@ -120,7 +122,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
       // quick validation (non-modal)
       if (!this.clientName && !this.address && !this.description && !this.amount) {
-        console.warn('Nothing to print. Please fill bill details.');
+        this.toast.warn('Nothing to print. Please fill bill details.');
         return;
       }
 
@@ -145,13 +147,17 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         const res = await el.printCanonA4(dataUrl, { landscape: false, copies });
         if (!res?.ok) {
           console.error('Print failed:', res?.error);
-          // Non-blocking notice
+          this.toast.error('Print failed. Check printer and try again.');
+        } else {
+          this.toast.success('Sent to printer.');
         }
       } else {
         await this.printHtmlInHiddenIframe(html);
+        this.toast.info('Opening system print dialog…');
       }
     } catch (err) {
       console.error('Print failed:', err);
+      this.toast.error('Unexpected print error.');
     } finally {
       this.isPrinting = false;
 
@@ -221,8 +227,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         .left-info .line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
         .gst-no {
           font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
-          font-size: 16px;
-          letter-spacing: 1px; /* spacing makes each digit clearer */
+          font-size: 16px; letter-spacing: 1px;
         }
         .left-info label { font-weight: 700; white-space: nowrap; }
 
@@ -242,7 +247,6 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         .discount-line { display: inline-flex; gap: 10px; align-items: baseline; }
         .highlight-value { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #2c3e50; }
 
-        /* Hide inputs in printed HTML (safety if this HTML is shown somewhere) */
         .print-toggle input, .print-toggle textarea, .print-toggle select { display: none !important; }
         .print-toggle .print-view { display: inline !important; }
       </style>`;
@@ -306,7 +310,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       document.body.removeChild(iframe);
-      alert('Unable to create print frame.');
+      this.toast.error('Unable to create print frame.');
       return;
     }
 
@@ -348,7 +352,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
     setTimeout(() => {
       if (!this.manualEmail || !this.manualEmail.includes('@')) {
-        alert('Please enter a valid email address');
+        this.toast.warn('Please enter a valid email address');
         return;
       }
 
@@ -382,8 +386,8 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       };
 
       this.billsService.sendBillByEmail(billData).subscribe({
-        next: () => alert('Email Sent!'),
-        error: () => alert('Failed to send email. Please try again.')
+        next: () => this.toast.success('Email sent!'),
+        error: () => this.toast.error('Failed to send email. Please try again.')
       });
     }, 10);
   }
