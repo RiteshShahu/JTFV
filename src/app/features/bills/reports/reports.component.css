@@ -1,3 +1,61 @@
+/* --- Base button look to match Edit/Delete --- */
+.btn-toggle,
+.btn-edit,
+.btn-delete {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: bold;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease, opacity 0.2s ease;
+  white-space: nowrap;
+}
+
+/* Existing Edit button */
+.btn-edit {
+  background-color: #607d8b;
+  color: #ffffff;
+}
+.btn-edit:hover { background-color: #546e7a; transform: scale(1.05); }
+
+/* Existing Delete button */
+.btn-delete {
+  background-color: #e53935;
+  color: #ffffff;
+  margin-left: 8px;
+}
+.btn-delete:hover { background-color: #c62828; transform: scale(1.05); }
+
+/* --- New: Mark Paid / Mark Unpaid buttons --- */
+
+/* Mark Paid (green, positive action) */
+.btn-paid {
+  background-color: #49af4e; /* green 700 */
+  color: #ffffff;
+}
+.btn-paid:hover { background-color: #1b5e20; transform: scale(1.05); }
+
+/* Mark Unpaid (neutral/attention, amber) */
+.btn-unpaid {
+  background-color: #607d8b; /* amber 800 */
+  color: #ffffff;            /* dark text for contrast */
+}
+.btn-unpaid:hover { background-color: #607d8b; transform: scale(1.05); }
+
+/* Disabled/in-flight state */
+.btn-toggle:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Keep Paid filter select short */
+#paidFilter {
+  width: 120px;       /* adjust to taste: 100–140px works well */
+  max-width: 150px;
+}
+
 /* Root Container */
 .report-container {
   padding: 30px;
@@ -18,8 +76,8 @@
 /* Search Section (smaller input) */
 .search-section {
   display: grid;
-  grid-template-columns: 180px minmax(150px, 200px) auto; /* dropdown | input | button */
-  gap: 12px 8px; /* reduced horizontal gap so they stay close but no overlap */
+  grid-template-columns: 180px minmax(150px, 200px) auto;
+  gap: 12px 8px;
   align-items: end;
   background-color: #ffffff;
   padding: 20px;
@@ -28,22 +86,14 @@
   margin-bottom: 30px;
 }
 
-/* Keep input within its column, avoid overflow */
 .search-section input[type="text"] {
   width: 100%;
   max-width: 200px;
   box-sizing: border-box;
 }
 
-/* Field group */
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0; /* allow input to shrink gracefully */
-}
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
-/* Field label (soft gray, above control) */
 .field-label {
   font-weight: 600;
   font-size: 14px;
@@ -52,7 +102,6 @@
   margin: 0;
 }
 
-/* Controls */
 .search-section select,
 .search-section input[type="text"] {
   width: 100%;
@@ -73,12 +122,7 @@
   background-color: #ffffff;
 }
 
-/* Button container (its own grid cell) */
-.actions {
-  display: flex;
-  align-items: flex-end;
-}
-
+.actions { display: flex; align-items: flex-end; }
 .search-section button {
   background-color: #3f51b5;
   color: #ffffff;
@@ -91,11 +135,7 @@
   transition: background-color 0.3s ease, transform 0.2s ease;
   white-space: nowrap;
 }
-
-.search-section button:hover {
-  background-color: #35449c;
-  transform: translateY(-2px);
-}
+.search-section button:hover { background-color: #35449c; transform: translateY(-2px); }
 
 /* Table Layout */
 .report-table {
@@ -127,96 +167,47 @@
   text-overflow: ellipsis;
 }
 
-.report-table tbody tr:hover {
-  background-color: #f4f6f8;
-  cursor: pointer;
-}
+.report-table tbody tr:hover { background-color: #f4f6f8; cursor: pointer; }
 
-/* Buttons */
-.btn-edit,
-.btn-delete {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: bold;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-/* Edit Button */
-.btn-edit {
-  background-color: #607d8b;
-  color: #ffffff;
-}
-
-.btn-edit:hover {
-  background-color: #546e7a;
-  transform: scale(1.05);
-}
-
-/* Delete Button */
-.btn-delete {
-  background-color: #e53935;
-  color: #ffffff;
-  margin-left: 8px;
-}
-
-.btn-delete:hover {
-  background-color: #c62828;
-  transform: scale(1.05);
-}
-
-/* Layout Wrapper */
-.centered-layout {
-  max-width: 100%;
-  margin: 0 auto;
-  padding: 0 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 30px;
-}
+/* A subtle visual cue for paid rows (optional) */
+tr.paid { opacity: 0.95; }
 
 /* Responsive Design */
 @media screen and (max-width: 768px) {
-  .report-table {
-    font-size: 12px;
-  }
-
-  .btn-edit,
-  .btn-delete {
-    width: 100%;
-    text-align: center;
-  }
+  .report-table { font-size: 12px; }
+  .btn-edit, .btn-delete, .btn-toggle { width: 100%; text-align: center; }
 }
 
-/* Responsive: stack search fields + full-width button */
 @media (max-width: 640px) {
-  .search-section {
-    grid-template-columns: 1fr; /* stack */
-    gap: 10px;
-  }
-  .actions {
-    align-items: stretch;
-  }
-  .search-section button {
-    width: 100%;
-  }
+  .search-section { grid-template-columns: 1fr; gap: 10px; }
+  .actions { align-items: stretch; }
+  .search-section button { width: 100%; }
 }
 
-/* Hide inputs/selects while printing */
+/* Print helpers */
 @media print {
   .print-toggle input,
-  .print-toggle select {
-    display: none !important;
-  }
+  .print-toggle select { display: none !important; }
+  .print-toggle .print-view { display: inline !important; }
+}
+.print-toggle .print-view { display: none; }
 
-  .print-toggle .print-view {
-    display: inline !important;
-  }
+/* Status badges */
+.badge[data-kind="paid"] {
+  background: #e6ffed;
+  color: #0a6b2f;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
 }
 
-/* Default state for print-toggle */
-.print-toggle .print-view {
-  display: none;
+.badge[data-kind="unpaid"] {
+  background: #fff5f5;
+  color: #9b1c1c;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 600;
 }
+
+/* Keep form alignment tidy */
+.search-section .field { display: flex; flex-direction: column; gap: 6px; }

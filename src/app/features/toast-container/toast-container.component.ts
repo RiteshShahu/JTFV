@@ -33,6 +33,7 @@ type ConfirmMsg = {
       </div>
     </div>
   `,
+  
   styles: [`
     .toast-wrap {
       position: fixed;

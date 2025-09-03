@@ -40,6 +40,14 @@ if (!fs.existsSync(dbPath)) {
   }
 }
 
+function normalizeBillNumber(v) {
+  if (v === undefined || v === null) return '';
+  const raw = String(v).trim();
+  const n = parseInt(raw, 10);
+  if (!Number.isNaN(n)) return String(n).padStart(3, '0'); // 001, 012, 120...
+  return raw; // fall back
+}
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) return console.error('Error opening database:', err);
   console.log('Connected to SQLite database:', dbPath);
@@ -108,22 +116,41 @@ db.run(`
 
   db.run(`
     CREATE TABLE IF NOT EXISTS bills (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, 
-      clientName TEXT, 
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      clientName TEXT,
       address TEXT,
-      billNumber TEXT, 
-      billDate TEXT, 
+      billNumber TEXT,
+      billDate TEXT,
       discount REAL,
       discountAmount REAL,
-      totalAmount REAL, 
-      finalAmount REAL, 
+      totalAmount REAL,
+      finalAmount REAL,
       description TEXT,
       billItems TEXT,
-      billType TEXT
+      billType TEXT,
+      isPaid INTEGER DEFAULT 0,   -- 0 = unpaid, 1 = paid
+      paidAt TEXT                 -- ISO timestamp or NULL
     )
   `);
 
-  db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bills_billNumber ON bills(billNumber)`);
+  // 2) Backfill columns for old DBs (safe no-op if already present)
+  (function ensureBillColumns() {
+    db.all(`PRAGMA table_info(bills)`, [], (err, cols) => {
+      if (err) { console.error('PRAGMA table_info(bills) failed:', err); return; }
+      const names = new Set(cols.map(c => c.name));
+      const addCol = (sql) => db.run(sql, [], (e) => {
+        if (e && !String(e.message || '').includes('duplicate column')) {
+          console.warn('ALTER TABLE failed:', e.message);
+        }
+      });
+
+      if (!names.has('isPaid')) addCol(`ALTER TABLE bills ADD COLUMN isPaid INTEGER DEFAULT 0`);
+      if (!names.has('paidAt')) addCol(`ALTER TABLE bills ADD COLUMN paidAt TEXT`);
+    });
+
+    // Unique index on billNumber (you already had this)
+    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bills_billNumber ON bills(billNumber)`);
+  })();
 
   // Enable FK so items delete with job
   db.run(`PRAGMA foreign_keys = ON`);
@@ -337,42 +364,57 @@ app.delete('/api/products/:id', (req, res) => {
 });
 
 // ==================== BILL ROUTES ====================
+
 // Create bill
 app.post('/api/bills', (req, res) => {
-  const b = req.body;
+  const b = req.body || {};
   b.billNumber = normalizeBillNumber(b.billNumber);
+
+  // Normalize / defaults
+  const billItemsJson = JSON.stringify(Array.isArray(b.billItems) ? b.billItems : (b.billItems ? b.billItems : []));
+  const isPaid = b.isPaid ? 1 : 0;
+  const paidAt = b.isPaid ? (b.paidAt || new Date().toISOString()) : null;
+
   const query = `
     INSERT INTO bills (
       clientName, address, billNumber, billDate,
-      discount, discountAmount,            -- ← added here
-      totalAmount, finalAmount, description, billItems, billType
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      discount, discountAmount, totalAmount, finalAmount,
+      description, billItems, billType,
+      isPaid, paidAt
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const values = [
-    b.clientName,
-    b.address,
+    b.clientName || '',
+    b.address || '',
     b.billNumber,
-    b.billDate,
-    b.discount,                 // percent
-    b.discountAmount ?? null,   // numeric value
-    b.totalAmount,
-    b.finalAmount,
+    b.billDate || new Date().toISOString().substring(0, 10), // YYYY-MM-DD
+    b.discount ?? 0,
+    b.discountAmount ?? null,
+    b.totalAmount ?? 0,
+    b.finalAmount ?? 0,
     b.description || '',
-    JSON.stringify(b.billItems || []),
-    b.billType || ''
+    billItemsJson,
+    b.billType || '',
+    isPaid,
+    paidAt
   ];
 
   db.run(query, values, function (err) {
-    if (err) return res.status(500).json({ message: 'Failed to save bill' });
+    if (err) {
+      console.error('Create bill error:', err);
+      return res.status(500).json({ message: 'Failed to save bill' });
+    }
     res.status(201).json({ message: 'Bill saved successfully', id: this.lastID });
   });
 });
 
-// Update bill
+// Update bill (does NOT alter paid status here; use the /paid route below)
 app.put('/api/bills/:billNumber', (req, res) => {
-  const b = req.body;
+  const b = req.body || {};
   b.billNumber = normalizeBillNumber(b.billNumber);
   const target = normalizeBillNumber(req.params.billNumber);
+
+  const billItemsJson = JSON.stringify(Array.isArray(b.billItems) ? b.billItems : (b.billItems ? b.billItems : []));
 
   const query = `
     UPDATE bills SET
@@ -389,27 +431,50 @@ app.put('/api/bills/:billNumber', (req, res) => {
     WHERE billNumber = ?
   `;
   const values = [
-    b.clientName,
-    b.address,
-    b.billDate,
-    b.discount,
+    b.clientName || '',
+    b.address || '',
+    b.billDate || new Date().toISOString().substring(0, 10),
+    b.discount ?? 0,
     b.discountAmount ?? null,
-    b.totalAmount,
-    b.finalAmount,
-    JSON.stringify(b.billItems || []),
+    b.totalAmount ?? 0,
+    b.finalAmount ?? 0,
+    billItemsJson,
     b.description || '',
     b.billType || '',
     target
   ];
 
   db.run(query, values, function (err) {
-    if (err) return res.status(500).json({ message: 'Failed to update bill' });
+    if (err) {
+      console.error('Update bill error:', err);
+      return res.status(500).json({ message: 'Failed to update bill' });
+    }
     if (this.changes === 0) return res.status(404).json({ message: 'Bill not found' });
     res.json({ message: 'Bill updated successfully' });
   });
 });
 
-// Get latest bill number
+// Toggle paid/unpaid
+app.put('/api/bills/:billNumber/paid', (req, res) => {
+  const billNumber = normalizeBillNumber(req.params.billNumber);
+  const isPaid = !!req.body?.isPaid ? 1 : 0;
+  const paidAt = isPaid ? new Date().toISOString() : null;
+
+  db.run(
+    `UPDATE bills SET isPaid = ?, paidAt = ? WHERE billNumber = ?`,
+    [isPaid, paidAt, billNumber],
+    function (err) {
+      if (err) {
+        console.error('Toggle paid error:', err);
+        return res.status(500).json({ error: 'DB error', details: err.message });
+      }
+      if (this.changes === 0) return res.status(404).json({ error: 'Bill not found' });
+      res.json({ ok: true, billNumber, isPaid: !!isPaid, paidAt });
+    }
+  );
+});
+
+// Get latest bill number (numeric sequences)
 app.get('/api/bills/latest', (req, res) => {
   db.get(
     `SELECT MAX(CAST(billNumber AS INTEGER)) AS n FROM bills`,
@@ -426,7 +491,10 @@ app.get('/api/bills/latest', (req, res) => {
 // Get all bills
 app.get('/api/bills', (req, res) => {
   db.all('SELECT * FROM bills ORDER BY id DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ message: 'Failed to fetch bills' });
+    if (err) {
+      console.error('Fetch bills error:', err);
+      return res.status(500).json({ message: 'Failed to fetch bills' });
+    }
     res.json(rows);
   });
 });
@@ -436,7 +504,6 @@ app.get('/api/bills/exists', (req, res) => {
   const raw = (req.query.billNumber ?? '').toString().trim();
   if (!raw) return res.status(400).json(false);
 
-  // Build variants: raw, integer, and zero-padded 3-digit
   const n = parseInt(raw, 10);
   const variants = new Set([raw]);
   if (!Number.isNaN(n)) {
@@ -444,8 +511,8 @@ app.get('/api/bills/exists', (req, res) => {
     variants.add(String(n).padStart(3, '0'));
   }
   const args = Array.from(variants);
-
   const placeholders = args.map(() => '?').join(',');
+
   db.get(
     `SELECT 1 FROM bills WHERE billNumber IN (${placeholders}) LIMIT 1`,
     args,
@@ -461,18 +528,30 @@ app.get('/api/bills/exists', (req, res) => {
 
 // Get bill by number
 app.get('/api/bills/:billNumber', (req, res) => {
-  db.get('SELECT * FROM bills WHERE billNumber = ?', [req.params.billNumber], (err, row) => {
-    if (err) return res.status(500).json({ message: 'Failed to fetch bill' });
+  const billNumber = normalizeBillNumber(req.params.billNumber);
+  db.get('SELECT * FROM bills WHERE billNumber = ?', [billNumber], (err, row) => {
+    if (err) {
+      console.error('Fetch bill error:', err);
+      return res.status(500).json({ message: 'Failed to fetch bill' });
+    }
     if (!row) return res.status(404).json({ message: 'Bill not found' });
-    row.billItems = JSON.parse(row.billItems || '[]');
+    try {
+      row.billItems = JSON.parse(row.billItems || '[]');
+    } catch {
+      row.billItems = [];
+    }
     res.json(row);
   });
 });
 
 // Delete bill
 app.delete('/api/bills/:billNumber', (req, res) => {
-  db.run('DELETE FROM bills WHERE billNumber = ?', [req.params.billNumber], function (err) {
-    if (err) return res.status(500).json({ message: 'Failed to delete bill' });
+  const billNumber = normalizeBillNumber(req.params.billNumber);
+  db.run('DELETE FROM bills WHERE billNumber = ?', [billNumber], function (err) {
+    if (err) {
+      console.error('Delete bill error:', err);
+      return res.status(500).json({ message: 'Failed to delete bill' });
+    }
     if (this.changes === 0) return res.status(404).json({ message: 'Bill not found' });
     res.json({ message: 'Bill deleted successfully' });
   });
@@ -790,12 +869,6 @@ app.get('*', (req, res) => {
 const server = app.listen(PORT, () => {
   console.log(`✅ Server running at http://localhost:${PORT}`);
 });
-
-function normalizeBillNumber(bn) {
-  const s = String(bn ?? '').trim();
-  const n = parseInt(s, 10);
-  return Number.isNaN(n) ? s : String(n).padStart(3, '0');
-}
 
 function shutdown() {
   console.log('\n🛑 Gracefully shutting down server...');

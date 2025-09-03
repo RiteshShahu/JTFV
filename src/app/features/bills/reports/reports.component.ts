@@ -15,6 +15,10 @@ export class ReportsComponent implements OnInit {
   filteredBills: any[] = [];
   selectedBill: any = null;
 
+  // NEW
+  paidFilter: 'all' | 'paid' | 'unpaid' = 'all';
+  isToggling = new Set<string>(); // in-flight protection per bill
+
   constructor(
     private billsService: BillsService,
     private router: Router,
@@ -38,16 +42,22 @@ export class ReportsComponent implements OnInit {
             }
           }
 
-          // Derive a fallback billType for older rows with no billType
+          // Ensure new fields exist with safe defaults
+          const isPaid =
+            typeof bill.isPaid === 'boolean'
+              ? bill.isPaid
+              : !!Number(bill.isPaid); // handles 0/1 from SQLite
+          const paidAt = bill.paidAt || null;
+
           const derivedBillType =
             typeof bill.billType === 'string' && bill.billType
               ? String(bill.billType).toLowerCase()
               : this.deriveBillType({ ...bill, billItems });
 
-          return { ...bill, billItems, billType: derivedBillType };
+          return { ...bill, billItems, billType: derivedBillType, isPaid, paidAt };
         });
 
-        this.filteredBills = [...this.bills];
+        this.applyFilters();
       },
       error: (err) => {
         console.error('Failed to load bills:', err);
@@ -60,23 +70,22 @@ export class ReportsComponent implements OnInit {
   private deriveBillType(bill: any): string | null {
     const name = (bill.clientName || '').toString().toLowerCase();
 
-    // If your Reliance bills always used this client name, this will catch them:
+    // If Reliance bills always used this client name, this will catch them:
     if (name.includes('freshpik spectra powai')) return 'reliance';
 
     // Heuristic: if billItems look like product-line items (have productId/price),
-    // and clientName is empty/unknown (as in your Reliance template), classify as reliance.
+    // and clientName is empty/unknown (as in the Reliance template), classify as reliance.
     const items = Array.isArray(bill.billItems) ? bill.billItems : [];
-    const looksLikeProductLines = items.some((it: any) => it && (it.productId || it.price || it.quantity));
+    const looksLikeProductLines = items.some(
+      (it: any) => it && (it.productId || it.price || it.quantity)
+    );
     if (!bill.clientName && looksLikeProductLines) return 'reliance';
 
     return null;
   }
 
   selectBill(bill: any): void {
-    this.selectedBill = {
-      ...bill,
-      billItems: bill.billItems
-    };
+    this.selectedBill = { ...bill, billItems: bill.billItems };
   }
 
   closeDetail(): void {
@@ -84,14 +93,16 @@ export class ReportsComponent implements OnInit {
   }
 
   async deleteBill(billNumber: string): Promise<void> {
-    if (!billNumber) { this.toast.warn('Missing bill number.'); return; }
+    if (!billNumber) {
+      this.toast.warn('Missing bill number.');
+      return;
+    }
 
     const ok = await this.toast.confirm({
       message: `Delete Bill No: ${billNumber}?`,
       type: 'warn',
       okText: 'Delete',
       cancelText: 'Cancel',
-      // timeoutMs: 8000, // optional auto-cancel after 8s
     });
     if (!ok) return;
 
@@ -131,7 +142,9 @@ export class ReportsComponent implements OnInit {
 
     // 3) Heuristic fallback for legacy rows
     const items = Array.isArray(bill.billItems) ? bill.billItems : [];
-    const looksLikeProductLines = items.some((it: any) => it && (it.productId || it.price || it.quantity));
+    const looksLikeProductLines = items.some(
+      (it: any) => it && (it.productId || it.price || it.quantity)
+    );
     if (!bill.clientName && looksLikeProductLines) return true;
 
     return false;
@@ -156,20 +169,35 @@ export class ReportsComponent implements OnInit {
   }
 
   onSearch(): void {
+    this.applyFilters();
+  }
+
+  /** NEW: unified filters (text + paid) */
+  applyFilters(): void {
     const query = this.searchText.trim().toLowerCase();
-    if (!query) {
-      this.filteredBills = [...this.bills];
-      return;
+
+    let list = [...this.bills];
+
+    // text filter
+    if (query) {
+      list = list.filter(bill => {
+        if (this.searchBy === 'billNumber') {
+          return (bill.billNumber || '').toString().toLowerCase().includes(query);
+        } else if (this.searchBy === 'clientName') {
+          return (bill.clientName || '').toString().toLowerCase().includes(query);
+        }
+        return false;
+      });
     }
 
-    this.filteredBills = this.bills.filter(bill => {
-      if (this.searchBy === 'billNumber') {
-        return (bill.billNumber || '').toString().toLowerCase().includes(query);
-      } else if (this.searchBy === 'clientName') {
-        return (bill.clientName || '').toString().toLowerCase().includes(query);
-      }
-      return false;
-    });
+    // paid filter
+    if (this.paidFilter === 'paid') {
+      list = list.filter(b => !!b.isPaid);
+    } else if (this.paidFilter === 'unpaid') {
+      list = list.filter(b => !b.isPaid);
+    }
+
+    this.filteredBills = list;
   }
 
   /** Safer print via hidden iframe (keeps your app shell intact). */
@@ -219,7 +247,46 @@ export class ReportsComponent implements OnInit {
       setTimeout(() => document.body.removeChild(iframe), 800);
     };
 
-    // Give the browser a moment to layout
     setTimeout(finish, 120);
+  }
+
+  /** NEW: toggle paid/unpaid */
+  async togglePaid(bill: any): Promise<void> {
+    if (!bill?.billNumber) return;
+    if (this.isToggling.has(bill.billNumber)) return; // prevent double clicks
+    this.isToggling.add(bill.billNumber);
+
+    const targetState = !bill.isPaid;
+
+    const ok = await this.toast.confirm({
+      message: `${targetState ? 'Mark as PAID' : 'Mark as UNPAID'}? Bill No: ${bill.billNumber}`,
+      type: targetState ? 'success' : 'warn',
+      okText: targetState ? 'Mark Paid' : 'Mark Unpaid',
+      cancelText: 'Cancel',
+    });
+    if (!ok) { this.isToggling.delete(bill.billNumber); return; }
+
+    // optimistic update
+    const prev = { isPaid: bill.isPaid, paidAt: bill.paidAt };
+    bill.isPaid = targetState;
+    bill.paidAt = targetState ? new Date().toISOString() : null;
+
+    this.billsService.markBillPaid(bill.billNumber, targetState).subscribe({
+      next: (res) => {
+        bill.isPaid = res.isPaid;
+        bill.paidAt = res.paidAt ?? null;
+        this.toast.success(`Bill ${bill.billNumber} marked ${res.isPaid ? 'PAID' : 'UNPAID'}.`);
+        this.applyFilters();
+        this.isToggling.delete(bill.billNumber);
+      },
+      error: (err) => {
+        console.error('Toggle paid failed:', err);
+        // rollback
+        bill.isPaid = prev.isPaid;
+        bill.paidAt = prev.paidAt;
+        this.toast.error('Could not update paid status.');
+        this.isToggling.delete(bill.billNumber);
+      }
+    });
   }
 }

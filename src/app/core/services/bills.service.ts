@@ -49,4 +49,11 @@ export class BillsService {
   billExists(billNumber: string) {
     return this.http.get<boolean>('http://localhost:3001/api/bills/exists', { params: { billNumber }});
   }
+
+  markBillPaid(billNumber: string, isPaid: boolean) {
+    return this.http.put<{ ok: boolean; billNumber: string; isPaid: boolean; paidAt?: string }>(
+      `http://localhost:3001/api/bills/${encodeURIComponent(billNumber)}/paid`,
+      { isPaid }
+    );
+  }
 }

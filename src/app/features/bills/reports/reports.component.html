@@ -1,58 +1,99 @@
 <app-navbar></app-navbar>
 
 <div class="centered-layout">
-<div class="report-container">
-  <h2>Saved Bills</h2>
+  <div class="report-container">
+    <h2>Saved Bills</h2>
 
-  <div class="search-section">
-    <div class="field">
-      <label for="searchBy" class="field-label">Search By</label>
-      <select id="searchBy" [(ngModel)]="searchBy">
-        <option value="billNumber">Bill No</option>
-        <option value="clientName">Name</option>
-      </select>
+    <div class="search-section">
+      <div class="field">
+        <label for="searchBy" class="field-label">Search By</label>
+        <select id="searchBy" [(ngModel)]="searchBy" (change)="applyFilters()">
+          <option value="billNumber">Bill No</option>
+          <option value="clientName">Name</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="searchText" class="field-label">Search</label>
+        <input
+          id="searchText"
+          type="text"
+          (input)="onSearch()"
+          [(ngModel)]="searchText"
+          placeholder="Enter search text"
+        />
+      </div>
+
+      <!-- Paid filter -->
+      <div class="field">
+        <label for="paidFilter" class="field-label">Paid</label>
+        <select id="paidFilter" [(ngModel)]="paidFilter" (change)="applyFilters()">
+          <option value="all">All</option>
+          <option value="paid">Paid</option>
+          <option value="unpaid">Unpaid</option>
+        </select>
+      </div>
+
+      <div class="actions">
+        <button class="button" (click)="applyFilters()">Search</button>
+      </div>
     </div>
 
-    <div class="field">
-      <label for="searchText" class="field-label">Search</label>
-      <input id="searchText" type="text" (input)="onSearch()" [(ngModel)]="searchText" placeholder="Enter search text" />
-    </div>
+    <table class="report-table" *ngIf="filteredBills.length">
+      <thead>
+        <tr>
+          <th>Bill No</th>
+          <th>Client</th>
+          <th>Date</th>
+          <th>Total</th>
+          <th>Final Amount</th>
+          <th>Status</th>
+          <th>Mark Paid</th>
+          <th>Edit</th>
+          <th>Delete</th>
+        </tr>
+      </thead>
 
-    <div class="actions">
-      <button class="button" (click)="onSearch()">Search</button>
-    </div>
+      <tbody>
+        <tr *ngFor="let bill of filteredBills" [class.paid]="bill.isPaid">
+          <td>{{ bill.billNumber }}</td>
+          <td>{{ bill.clientName }}</td>
+          <td>{{ bill.billDate }}</td>
+          <td>{{ bill.totalAmount | currency:'INR' }}</td>
+          <td>{{ bill.finalAmount | currency:'INR' }}</td>
+
+          <!-- Status badge -->
+          <td>
+            <span class="badge" [attr.data-kind]="bill.isPaid ? 'paid' : 'unpaid'">
+              {{ bill.isPaid ? ('Paid' + (bill.paidAt ? ' (' + (bill.paidAt | date:'dd-MMM-yy') + ')' : '')) : 'Unpaid' }}
+            </span>
+          </td>
+
+          <!-- Toggle button (styled like your Edit/Delete) -->
+          <td>
+            <button
+              type="button"
+              class="btn-toggle"
+              [ngClass]="bill.isPaid ? 'btn-unpaid' : 'btn-paid'"
+              [disabled]="isToggling.has(bill.billNumber)"
+              (click)="togglePaid(bill)"
+            >
+              {{ bill.isPaid ? 'Mark Unpaid' : 'Mark Paid' }}
+            </button>
+          </td>
+
+          <td>
+            <button type="button" class="btn-edit" (click)="goToEdit(bill)">Edit</button>
+          </td>
+          <td>
+            <button class="btn-delete" (click)="deleteBill(bill.billNumber)">Delete</button>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p *ngIf="!filteredBills.length">No bills found.</p>
+
+    <div id="print-section" style="display:none"></div>
   </div>
-
-  <table class="report-table" *ngIf="filteredBills.length">
-    <thead>
-      <tr>
-        <th>Bill No</th>
-        <th>Client</th>
-        <th>Date</th>
-        <th>Total</th>
-        <th>Final Amount</th>
-        <th>Edit</th>
-        <th>Delete</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr *ngFor="let bill of filteredBills">
-        <td>{{ bill.billNumber }}</td>
-        <td>{{ bill.clientName }}</td>
-        <td>{{ bill.billDate }}</td>
-        <td>{{ bill.totalAmount | currency:'INR' }}</td>
-        <td>{{ bill.finalAmount | currency:'INR' }}</td>
-        <td>
-          <button type="button" class="btn btn-outline-primary btn-edit" (click)="goToEdit(bill)"> Edit </button>
-        </td>
-        <td>
-          <button class="btn btn-outline-danger btn-delete" (click)="deleteBill(bill.billNumber)"> Delete </button>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p *ngIf="!filteredBills.length">No bills found.</p>
-
-</div>
 </div>
