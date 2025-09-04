@@ -13,6 +13,21 @@
       </select>
     </div>
 
+    <!-- Date Range Filters -->
+    <div class="form-group">
+      <label for="fromDate">From</label>
+      <input id="fromDate" type="date" [(ngModel)]="dateFrom" (change)="onDateChange()" />
+    </div>
+
+    <div class="form-group">
+      <label for="toDate">To</label>
+      <input id="toDate" type="date" [(ngModel)]="dateTo" (change)="onDateChange()" />
+    </div>
+
+    <div class="button-group">
+      <button class="button" (click)="clearRange()">Clear</button>
+    </div>
+
     <div class="button-group">
       <button class="button" (click)="load()">Refresh</button>
       <button class="button" routerLink="/barcode">Back To Barcode</button>
