@@ -136,12 +136,6 @@ export class LabelPrintHistoryComponent implements OnInit {
     this.items = [];
   }
 
-  clearRange() {
-    // restore default last-month→today instead of blanking
-    this.setDefaultRangeLastMonthToToday();
-    this.onDateChange();
-  }
-
   private groupByDay(rows: any[], field: FieldFilter): GroupedDay[] {
     const map = new Map<string, { jobs: any[]; totalLabels: number }>();
     for (const j of rows) {

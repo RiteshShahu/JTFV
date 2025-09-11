@@ -10,6 +10,7 @@ type Row = {
   oldPrice?: number;
   newPrice?: number | null;
   units?: string;
+  margin?: number;
 };
 
 @Component({
@@ -29,7 +30,7 @@ export class PriceChangeComponent implements OnInit {
   toList = '';
   subject = 'Product Price Change';
   message =
-    'These are the list of products that need their price to be changed and if the price is changed from your end then please send me an email on update.';
+    'Below is the list of products requiring a price update. We would appreciate it if you could update them and notify us by email.';
   filename = 'New Product Price Change.xlsx';
 
   isBuilding = false;
@@ -46,7 +47,15 @@ export class PriceChangeComponent implements OnInit {
   }
 
   private emptyRow(): Row {
-    return { productId: null, productName: '', barcode: '', oldPrice: undefined, newPrice: null, units: '' };
+    return {
+      productId: null,
+      productName: '',
+      barcode: '',
+      oldPrice: undefined,
+      newPrice: null,
+      units: '',
+      margin: 15   // default 15%
+    };
   }
 
   private loadProducts() {
@@ -126,22 +135,35 @@ export class PriceChangeComponent implements OnInit {
       const XLSX = await this.getXLSX();
 
       const rows = this.validRows().map((r, idx) => {
-        const margin = r.newPrice ? +(r.newPrice * 0.85).toFixed(2) : '';
+        const marginNum = r.margin ?? 15;
+        const cp = r.newPrice ? +(r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
         return {
           No: idx + 1,
           Barcode: r.barcode || '',
           Product: r.productName,
           'Old Price': r.oldPrice ?? '',
-          'New Price': r.newPrice ?? '',
-          'Margin': margin,
+          'Selling Price': r.newPrice ?? '',
+          'Cost Price': cp,
+          'Margin %': `${marginNum}%`,   // <-- show as "15%"
         };
       });
 
       const ws = XLSX.utils.json_to_sheet(
         rows.length
           ? rows
-          : [{ No: '', Barcode: '', Product: '', 'Old Price': '', 'New Price': '', 'Margin': '' }]
+          : [{ No: '', Barcode: '', Product: '', 'Old Price': '', 'Selling Price': '', 'Cost Price': '', 'Margin %': '' }]
       );
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 6 },
+        { wch: 14 },
+        { wch: 30 },  // Product column wider
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 12 },
+        { wch: 10 },
+      ];
 
       // Header bold (note: community build may ignore styles; safe to keep)
       const ref = ws['!ref'];
@@ -197,18 +219,74 @@ export class PriceChangeComponent implements OnInit {
 
     try {
       this.isEmailing = true;
+
+      // 1) Build workbook & base64 (unchanged)
       const { wb, XLSX } = await this.buildWorkbook();
       const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
-      await this.priceSvc
-        .sendEmail({
-          to,
-          subject: this.subject,
-          message: this.message,
-          filename: this.filename,
-          fileBase64: base64,
-        })
-        .toPromise();
+      // 2) Build an email-friendly summary of rows (HTML + Text)
+      const rows = this.validRows();
+      const htmlTable = rows.length
+        ? `
+          <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th align="left">No</th>
+                <th align="left">Barcode</th>
+                <th align="left">Product</th>
+                <th align="right">Old Price</th>
+                <th align="right">Selling Price</th>
+                <th align="right">Cost Price</th>
+                <th align="right">Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((r, i) => {
+                const marginNum = r.margin ?? 15;
+                const cp = r.newPrice ? (r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
+                const sp = r.newPrice ?? '';
+                const old = r.oldPrice ?? '';
+                return `
+                  <tr>
+                    <td>${i + 1}</td>
+                    <td>${r.barcode || ''}</td>
+                    <td>${r.productName}</td>
+                    <td align="right">${old}</td>
+                    <td align="right">${sp}</td>
+                    <td align="right">${cp}</td>
+                    <td align="right">${marginNum}%</td>  <!-- shows like 15% -->
+                  </tr>`;
+              }).join('')}
+            </tbody>
+          </table>`
+        : `<p><i>No items provided.</i></p>`;
+
+      const textList = rows.length
+        ? rows.map((r, i) => {
+            const marginNum = r.margin ?? 15;
+            const cp = r.newPrice ? (r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
+            const sp = r.newPrice ?? '';
+            const old = r.oldPrice ?? '';
+            return `${i + 1}. ${r.productName} | Barcode: ${r.barcode || ''} | Old Price: ${old} | Selling Price: ${sp} | Cost Price: ${cp} | Margin: ${marginNum}%`;
+          }).join('\n')
+        : 'No items provided.';
+
+      const messageHtml =
+        `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;">
+          <p>${(this.message || '').replace(/\n/g, '<br/>')}</p>
+          ${htmlTable}
+        </div>`;
+
+      const messageText = `${this.message || ''}\n\n${textList}`;
+
+      // 3) Send
+      await this.priceSvc.sendEmail({
+        to,
+        subject: this.subject,
+        message: messageText,     // plaintext fallback (always shows “15%”)
+        filename: this.filename,
+        fileBase64: base64,
+      }).toPromise();
 
       this.toast.success('Email sent!');
     } catch (e: any) {
