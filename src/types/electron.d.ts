@@ -17,11 +17,11 @@ declare global {
 
   interface CanonPrintOptions {
     landscape?: boolean;
-    copies?: number; // number of copies to print
+    copies?: number;
   }
 
   interface CitizenPrintOptions {
-    copies?: number; // number of copies to print
+    copies?: number;
   }
 
   interface Window {
@@ -32,11 +32,14 @@ declare global {
       /** Print a 50mm label to Citizen (expects a data: URL of HTML) */
       printCitizen50: (dataUrl: string, opts?: CitizenPrintOptions) => Promise<PrintResult>;
 
+      /** Print a 38x25mm label to Citizen (expects a data: URL of HTML) */
+      printCitizen38x25: (dataUrl: string, opts?: CitizenPrintOptions) => Promise<PrintResult>;
+
       /** Get available printers from main */
       listPrinters: () => Promise<Printer[]>;
 
       /** Gently nudge focus back to the app after printing */
-      refocusHard: () => Promise<void>;
+      refocusHard: () => Promise<void> | void;
     };
   }
 }

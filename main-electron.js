@@ -8,7 +8,6 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
-// pdf-to-printer is CJS; use createRequire so it works in ESM
 const { print: printPdf } = require('pdf-to-printer');
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,16 +77,12 @@ const createWindow = () => {
       url.startsWith('https://localhost:3001') ||
       url === 'about:blank';
 
-    if (sameOrigin) {
-      return { action: 'allow' };
-    }
+    if (sameOrigin) return { action: 'allow' };
 
-    // Open all other URLs externally
     shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // ✅ Extra guard for redirects
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const sameOrigin = url.startsWith('http://localhost:3001');
     if (!sameOrigin) {
@@ -118,12 +113,7 @@ function getMainWindow() {
   return BrowserWindow.getAllWindows().find(w => !w.isDestroyed()) || mainWindow;
 }
 
-/** A light, non-intrusive focus nudge:
- * - briefly setAlwaysOnTop to pull the window forward
- * - focus app + webContents
- * - revert AOT after ~150ms
- * No minimize/restore. No multiple pulses.
- */
+/** A light, non-intrusive focus nudge */
 function gentleRefocus() {
   const w = getMainWindow();
   if (!w) return;
@@ -151,7 +141,8 @@ const mm = n => n * 1000;
 // Common sizes
 const SIZES = {
   A4: 'A4',
-  LABEL_50x50: { width: mm(50), height: mm(50) }
+  LABEL_50x50: { width: mm(50), height: mm(50) },
+  LABEL_38x25: { width: mm(38), height: mm(25) },
 };
 
 // Preferred queue names
@@ -296,7 +287,7 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
     const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CANON);
     if (!deviceName) return { ok: false, error: 'Canon LBP2900 printer not found.' };
 
-    // PDF → spool route (avoids Chromium print loop/focus issues)
+    // PDF → spool route (silent)
     await printHtmlViaPdfSpool({
       html,
       printerName: deviceName,
@@ -338,7 +329,34 @@ ipcMain.handle('print:citizen-50', async (_event, { url, copies = 1 } = {}) => {
     return { ok: false, error: String(err?.message || err) };
   } finally {
     try { if (!win.isDestroyed()) win.close(); } catch {}
-    pulseRefocus();
+    gentleRefocus();
+  }
+});
+
+ipcMain.handle('print:citizen-38x25', async (_event, { url, copies = 1 } = {}) => {
+  log(`IPC print:citizen-38x25 URL len=${(url||'').length}, copies=${copies}`);
+  const win = createPrintWindow();
+  try {
+    const html = htmlFromDataUrl(url);
+
+    const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CITIZEN);
+    if (!deviceName) return { ok: false, error: 'Citizen CL-E321 printer not found.' };
+
+    await printHtmlViaPdfSpool({
+      html,
+      printerName: deviceName,
+      pageSize: SIZES.LABEL_38x25, // custom size
+      landscape: false,
+      copies
+    });
+
+    return { ok: true };
+  } catch (err) {
+    log(`❌ IPC print:citizen-38x25 error: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  } finally {
+    try { if (!win.isDestroyed()) win.close(); } catch {}
+    gentleRefocus();
   }
 });
 
