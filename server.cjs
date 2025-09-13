@@ -189,6 +189,9 @@ db.run(`
   db.run(`CREATE INDEX IF NOT EXISTS idx_print_jobs_createdAt ON print_jobs(createdAt)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_print_job_items_jobId ON print_job_items(jobId)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_print_job_items_barcode ON print_job_items(barcode)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_print_jobs_packedOnDate ON print_jobs(packedOnDate)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_print_job_items_packedOnDate ON print_job_items(packedOnDate)`);
+
 
 });
 
@@ -665,6 +668,173 @@ app.get('/api/label-prints/all', (req, res) => {
       ? res.status(500).json({ message: 'Query failed' })
       : res.json(rows)
   );
+});
+
+// === Add near other /api/label-prints routes ===
+app.get('/api/label-prints/day-totals', (req, res) => {
+  const field = req.query.field === 'packedOnDate' ? 'packedOnDate' : 'createdAt';
+  const from = (req.query.from || '').toString();
+  const to = (req.query.to || '').toString();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ message: 'from/to must be YYYY-MM-DD' });
+  }
+
+  // Two fast paths: createdAt (jobs) vs packedOnDate (items)
+  const sql =
+    field === 'createdAt'
+      ? `
+        SELECT date(j.createdAt) AS date,
+               SUM(j.totalLabels)              AS totalLabels,
+               SUM(i.mrp * i.quantity)         AS totalMrp
+        FROM print_jobs j
+        LEFT JOIN print_job_items i ON i.jobId = j.id
+        WHERE date(j.createdAt) BETWEEN date(?) AND date(?)
+        GROUP BY date(j.createdAt)
+        ORDER BY date DESC
+      `
+      : `
+        SELECT i.packedOnDate                 AS date,
+               SUM(i.quantity)                AS totalLabels,
+               SUM(i.mrp * i.quantity)        AS totalMrp
+        FROM print_job_items i
+        WHERE i.packedOnDate BETWEEN ? AND ?
+        GROUP BY i.packedOnDate
+        ORDER BY date DESC
+      `;
+
+  db.all(sql, [from, to], (err, rows) => {
+    if (err) {
+      console.error('day-totals query failed:', err);
+      return res.status(500).json({ message: 'Query failed' });
+    }
+    // normalize numbers
+    const out = (rows || []).map(r => ({
+      date: r.date,
+      totalLabels: Number(r.totalLabels) || 0,
+      totalMrp: Number(r.totalMrp) || 0,
+    }));
+    res.json(out);
+  });
+});
+
+// NEW: Summary per day between from..to (server-side aggregation)
+app.get('/api/label-prints/summary', (req, res) => {
+  const field = req.query.field === 'packedOnDate' ? 'packedOnDate' : 'createdAt';
+  const from = (req.query.from || '').toString();
+  const to = (req.query.to || '').toString();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ message: 'from/to must be YYYY-MM-DD' });
+  }
+
+  const sql =
+    field === 'createdAt'
+      ? `
+        WITH base AS (
+          SELECT
+            date(datetime(j.createdAt,'localtime')) AS day,
+            j.id, j.totalLabels
+          FROM print_jobs j
+          WHERE date(datetime(j.createdAt,'localtime')) BETWEEN date(?) AND date(?)
+        ),
+        per_job AS (
+          SELECT i.jobId, SUM(i.mrp * i.quantity) AS totalMrp
+          FROM print_job_items i
+          GROUP BY i.jobId
+        )
+        SELECT
+          b.day                                        AS date,
+          COUNT(b.id)                                  AS jobCount,
+          COALESCE(SUM(b.totalLabels), 0)              AS totalLabels,
+          COALESCE(SUM(pj.totalMrp), 0.0)              AS totalMrp,
+          ROUND(COALESCE(SUM(pj.totalMrp),0) * 0.85, 2) AS finalAmount
+        FROM base b
+        LEFT JOIN per_job pj ON pj.jobId = b.id
+        GROUP BY b.day
+        ORDER BY b.day DESC
+      `
+      : `
+        WITH base AS (
+          SELECT
+            i.packedOnDate             AS day,
+            i.jobId,
+            SUM(i.quantity)            AS labels,
+            SUM(i.mrp * i.quantity)    AS totalMrp
+          FROM print_job_items i
+          WHERE i.packedOnDate BETWEEN ? AND ?
+          GROUP BY i.packedOnDate, i.jobId
+        )
+        SELECT
+          day                          AS date,
+          COUNT(jobId)                 AS jobCount,
+          COALESCE(SUM(labels), 0)     AS totalLabels,
+          COALESCE(SUM(totalMrp), 0.0) AS totalMrp,
+          ROUND(COALESCE(SUM(totalMrp),0) * 0.85, 2) AS finalAmount
+        FROM base
+        GROUP BY day
+        ORDER BY day DESC
+      `;
+
+  db.all(sql, [from, to], (err, rows) => {
+    if (err) {
+      console.error('summary query failed:', err);
+      return res.status(500).json({ message: 'Query failed' });
+    }
+    const out = (rows || []).map(r => ({
+      date: r.date,
+      jobCount: Number(r.jobCount) || 0,
+      totalLabels: Number(r.totalLabels) || 0,
+      totalMrp: Number(r.totalMrp) || 0,
+      finalAmount: Number(r.finalAmount) || 0,
+    }));
+    res.json(out);
+  });
+});
+
+// NEW: Jobs-by-day with totals (used when expanding a date)
+app.get('/api/label-prints/jobs-by-day', (req, res) => {
+  const date = (req.query.date || '').toString();
+  const field = req.query.field === 'packedOnDate' ? 'packedOnDate' : 'createdAt';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ message: 'date must be YYYY-MM-DD' });
+  }
+
+  const where =
+    field === 'createdAt'
+      ? `date(datetime(lp.createdAt,'localtime')) = date(?)`
+      : `lp.packedOnDate = ?`;
+
+  const sql = `
+    WITH per_job AS (
+      SELECT
+        i.jobId,
+        SUM(i.quantity)             AS totalLabels,
+        SUM(i.mrp * i.quantity)     AS totalMrp
+      FROM print_job_items i
+      GROUP BY i.jobId
+    )
+    SELECT
+      lp.id,
+      lp.createdAt,
+      lp.packedOnDate,
+      lp.printStyle,
+      COALESCE(pj.totalLabels, 0)              AS totalLabels,
+      COALESCE(pj.totalMrp, 0.0)               AS totalMrp,
+      ROUND(COALESCE(pj.totalMrp,0) * 0.85, 2) AS finalAmount
+    FROM print_jobs lp
+    LEFT JOIN per_job pj ON pj.jobId = lp.id
+    WHERE ${where}
+    ORDER BY datetime(lp.createdAt) DESC
+  `;
+
+  db.all(sql, [date], (err, rows) => {
+    if (err) {
+      console.error('jobs-by-day query failed:', err);
+      return res.status(500).json({ message: 'Query failed' });
+    }
+    res.json(rows || []);
+  });
 });
 
 // ==================== AUTH ROUTES ====================

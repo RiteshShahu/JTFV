@@ -1,50 +1,47 @@
-import { Component, OnInit } from '@angular/core';
-import { LabelPrintsService } from 'src/app/core/services/label-prints.service';
-
-type FieldFilter = 'createdAt' | 'packedOnDate';
-type GroupedDay = { date: string; jobs: any[]; totalLabels: number };
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
+import { Observable, of } from 'rxjs';
+import { LabelPrintsService, DaySummary, JobRow, ItemRow, FieldFilter } from 'src/app/core/services/label-prints.service';
 
 @Component({
   selector: 'app-label-print-history',
   templateUrl: './label-print-history.component.html',
   styleUrls: ['./label-print-history.component.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LabelPrintHistoryComponent implements OnInit {
   field: FieldFilter = 'packedOnDate';
 
-  loading = false;
-  allJobs: any[] = [];
-  groups: GroupedDay[] = [];
-
-  expandedDate: string | null = null;
-  expandedJobId: number | null = null;
-  items: any[] = [];
-
-  // YYYY-MM-DD for <input type="date">
+  // inputs (YYYY-MM-DD)
   dateFrom: string | null = null;
   dateTo: string | null = null;
+
+  // state
+  loading = false;
+  expandedDate: string | null = null;
+  expandedJobId: number | null = null;
+
+  // view-model streams
+  summaries$: Observable<DaySummary[]> = of([]);
+  jobsForDay$: Observable<JobRow[]> = of([]);
+  itemsForJob$: Observable<ItemRow[]> = of([]);
 
   constructor(private api: LabelPrintsService) {}
 
   ngOnInit(): void {
-    // set default: last month same day -> today (both in IST)
     this.setDefaultRangeLastMonthToToday();
-    this.load();
+    this.reloadSummary();
   }
 
-  // --- Defaults / Quick helpers ------------------------------------------------
+  // ---------- Defaults / helpers ----------
   private setDefaultRangeLastMonthToToday(): void {
     const todayYMD = this.todayYMDinIST();
     const { y, m, d } = this.splitYMD(todayYMD);
-
-    // previous month (clamp day to last day of that month)
     const prevM = m === 1 ? 12 : m - 1;
     const prevY = m === 1 ? y - 1 : y;
     const lastDayPrevMonth = this.daysInMonth(prevY, prevM);
     const prevD = Math.min(d, lastDayPrevMonth);
-
-    this.dateFrom = this.joinYMD(prevY, prevM, prevD); // e.g., 2025-08-05
-    this.dateTo   = todayYMD;                           // e.g., 2025-09-05
+    this.dateFrom = this.joinYMD(prevY, prevM, prevD);
+    this.dateTo = todayYMD;
   }
 
   private splitYMD(ymd: string) {
@@ -60,11 +57,9 @@ export class LabelPrintHistoryComponent implements OnInit {
     return new Date(y, m, 0).getDate(); // m is 1-12 here
   }
 
-  // today's Y-M-D in IST
   private todayYMDinIST(): string {
     return this.toYMDinIST(new Date().toISOString());
   }
-  // 'YYYY-MM-DD' in IST for an ISO instant
   toYMDinIST(iso: string): string {
     if (!iso) return '';
     const date = new Date(iso);
@@ -78,103 +73,52 @@ export class LabelPrintHistoryComponent implements OnInit {
     return `${y}-${m}-${d}`;
   }
 
-  // --- Data load / filtering ---------------------------------------------------
-  load() {
+  // ---------- Data load ----------
+  reloadSummary() {
+    if (!this.dateFrom || !this.dateTo) return;
     this.loading = true;
     this.expandedDate = null;
     this.expandedJobId = null;
-    this.items = [];
 
-    this.api.getAllJobs().subscribe({
-      next: (rows) => {
-        this.allJobs = Array.isArray(rows) ? rows : [];
-        const filtered = this.applyRangeFilter(this.allJobs, this.field, this.dateFrom, this.dateTo);
-        this.groups = this.groupByDay(filtered, this.field);
-        this.loading = false;
-      },
-      error: (e) => {
-        console.error('Failed to load jobs:', e);
-        this.allJobs = [];
-        this.groups = [];
-        this.loading = false;
-      },
-    });
+    this.summaries$ = this.api.getSummary(this.dateFrom, this.dateTo, this.field);
+    // Spinner is local only; the async pipe controls rendering readiness
+    this.loading = false;
   }
 
   onFieldChange() {
-    this.expandedDate = null;
-    this.expandedJobId = null;
-    this.items = [];
-    const filtered = this.applyRangeFilter(this.allJobs, this.field, this.dateFrom, this.dateTo);
-    this.groups = this.groupByDay(filtered, this.field);
-  }
-
-  // inclusive filter over [from..to] in chosen field (IST YMD)
-  private applyRangeFilter(rows: any[], field: FieldFilter, from?: string | null, to?: string | null): any[] {
-    let f = (from || '').trim();
-    let t = (to || '').trim();
-    if (f && t && f > t) [f, t] = [t, f]; // normalize
-
-    if (!f && !t) return rows;
-
-    return rows.filter(j => {
-      const key = field === 'createdAt'
-        ? this.toYMDinIST(j.createdAt)
-        : (j.packedOnDate || '');
-      if (!key) return false;
-      if (f && key < f) return false;
-      if (t && key > t) return false;
-      return true;
-    });
+    this.reloadSummary();
   }
 
   onDateChange() {
-    const filtered = this.applyRangeFilter(this.allJobs, this.field, this.dateFrom, this.dateTo);
-    this.groups = this.groupByDay(filtered, this.field);
-    this.expandedDate = null;
-    this.expandedJobId = null;
-    this.items = [];
+    this.reloadSummary();
   }
 
-  private groupByDay(rows: any[], field: FieldFilter): GroupedDay[] {
-    const map = new Map<string, { jobs: any[]; totalLabels: number }>();
-    for (const j of rows) {
-      const key = field === 'createdAt' ? this.toYMDinIST(j.createdAt) : (j.packedOnDate || '');
-      if (!key) continue;
-      if (!map.has(key)) map.set(key, { jobs: [], totalLabels: 0 });
-      const bucket = map.get(key)!;
-      bucket.jobs.push(j);
-      bucket.totalLabels += Number(j.totalLabels) || 0;
-    }
-    return Array.from(map.entries())
-      .map(([date, v]) => ({
-        date,
-        jobs: v.jobs.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-        totalLabels: v.totalLabels,
-      }))
-      .sort((a, b) => b.date.localeCompare(a.date)); // newest day first
-  }
-
+  // ---------- Expanders ----------
   toggleDay(date: string) {
-    this.items = [];
+    this.itemsForJob$ = of([]);
     this.expandedJobId = null;
-    this.expandedDate = this.expandedDate === date ? null : date;
+
+    if (this.expandedDate === date) {
+      this.expandedDate = null;
+      this.jobsForDay$ = of([]);
+      return;
+    }
+
+    this.expandedDate = date;
+    this.jobsForDay$ = this.api.getJobsForDay(date, this.field);
   }
 
-  toggleItems(job: any) {
+  toggleItems(job: JobRow) {
     if (this.expandedJobId === job.id) {
       this.expandedJobId = null;
-      this.items = [];
+      this.itemsForJob$ = of([]);
       return;
     }
     this.expandedJobId = job.id;
-    this.items = [];
-    this.api.getJobItems(job.id).subscribe({
-      next: (rows) => (this.items = rows || []),
-      error: (e) => { console.error('Failed to load items:', e); this.items = []; },
-    });
+    this.itemsForJob$ = this.api.getJobItems(job.id);
   }
 
+  // ---------- Formatters ----------
   formatDDMMYYYY(ymd: string): string {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return ymd || '';
     const [y, m, d] = ymd.split('-');
@@ -192,11 +136,23 @@ export class LabelPrintHistoryComponent implements OnInit {
     return `${get('day')}-${get('month')}-${get('year')} , at ${get('hour')}:${get('minute')}${(get('dayPeriod') || '').toUpperCase()}`;
   }
 
-  // amounts
+  // ---------- Totals (row helpers for items table) ----------
   private toNum(v: any): number { const n = Number(v); return isFinite(n) ? n : 0; }
-  rowTotal(r: any): number { return this.toNum(r.mrp) * this.toNum(r.quantity); }
-  rowFinalWithMargin(r: any): number { return this.rowTotal(r) * 0.85; }
-  grandFinalWithMargin(): number { return (this.items || []).reduce((s, r) => s + this.rowFinalWithMargin(r), 0); }
-  grandTotal(): number { return (this.items || []).reduce((s, r) => s + this.rowTotal(r), 0); }
-  isReliance(job: any): boolean { return (job?.printStyle || '').toLowerCase() === 'reliance'; }
+  rowTotal(r: ItemRow): number { return this.toNum(r.mrp) * this.toNum(r.quantity); }
+  rowFinalWithMargin(r: ItemRow): number { return this.rowTotal(r) * 0.85; }
+  grandFinalWithMargin(items: ItemRow[] = []): number {
+    return items.reduce((s, r) => s + this.rowFinalWithMargin(r), 0);
+  }
+  grandTotal(items: ItemRow[] = []): number {
+    return items.reduce((s, r) => s + this.rowTotal(r), 0);
+  }
+
+  isReliance(job: JobRow): boolean {
+    return (job?.printStyle || '').toLowerCase() === 'reliance';
+  }
+
+  // ---------- trackBy ----------
+  trackByDate = (_: number, g: DaySummary) => g.date;
+  trackByJob  = (_: number, j: JobRow)     => j.id;
+  trackByItem = (_: number, r: ItemRow)    => r.id ?? `${r.barcode}-${r.mrp}-${r.quantity}`;
 }
