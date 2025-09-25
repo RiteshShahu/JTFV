@@ -21,14 +21,15 @@ export class AddProductsComponent {
   ) {}
 
   onSubmit(form: NgForm): void {
-    if (!form.valid) {
-      this.toast.warn('Please fill all required fields.');
+    const nameData = form.value;
+
+    const productName = (nameData.name ?? '').trim(); // ← use "name"
+    if (!productName) {
+      this.toast.warn('Please enter product name.');
       return;
     }
 
-    const nameData = form.value;
     this.saving = true;
-
     this.productService.addName(nameData).subscribe({
       next: () => {
         this.toast.success('Product added!');

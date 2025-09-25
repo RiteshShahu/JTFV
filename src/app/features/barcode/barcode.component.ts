@@ -11,6 +11,7 @@ export type LabelStyle = 'dmart' | 'reliance' | 'old-dmart';
   templateUrl: './barcode.component.html',
   styleUrls: ['./barcode.component.css'],
 })
+
 export class BarcodeComponent implements OnInit {
   products: any[] = [];
   printItems: any[] = [];

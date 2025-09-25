@@ -3,29 +3,37 @@
   <h2>Add New Product</h2>
   <form #productForm="ngForm" (ngSubmit)="onSubmit(productForm)">
     <div class="form-row">
-      <input type="text" name="name" placeholder="Product Name" ngModel required />
+      <!-- ✅ Only Product Name required -->
+      <input
+        type="text"
+        name="name"
+        placeholder="Product Name"
+        ngModel
+        required
+      />
 
-      <select name="priority" ngModel required>
+      <!-- Optional -->
+      <select name="priority" ngModel>
         <option value="" disabled selected>Select Priority</option>
         <option value="Yes">Yes</option>
         <option value="No">No</option>
       </select>
 
-      <input type="text" name="units" placeholder="Units" ngModel required />
+      <input type="text" name="units" placeholder="Units" ngModel />
 
-      <select name="type" ngModel required>
+      <select name="type" ngModel>
         <option value="" disabled selected>Select Type</option>
         <option value="vegetable">Vegetable</option>
         <option value="fruit">Fruit</option>
         <option value="others">Others</option>
       </select>
 
-      <input type="text" name="barcode" placeholder="Barcode" ngModel required />
+      <input type="text" name="barcode" placeholder="Barcode" ngModel />
     </div>
 
     <div class="form-row">
-      <input type="number" name="mrp" placeholder="MRP" ngModel required min="0" step="0.01" />
-      <input type="number" name="expiryDays" placeholder="Expiry Days" ngModel required min="0" />
+      <input type="number" name="mrp" placeholder="MRP" ngModel min="0" step="0.01" />
+      <input type="number" name="expiryDays" placeholder="Expiry Days" ngModel min="0" />
     </div>
 
     <div class="form-row">
