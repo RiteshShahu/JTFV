@@ -23,7 +23,7 @@ export class AddProductsComponent {
   onSubmit(form: NgForm): void {
     const nameData = form.value;
 
-    const productName = (nameData.name ?? '').trim(); // ← use "name"
+    const productName = (nameData.name ?? '').trim();
     if (!productName) {
       this.toast.warn('Please enter product name.');
       return;
