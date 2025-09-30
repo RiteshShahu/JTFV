@@ -24,7 +24,9 @@
       <input type="number" name="expiryDays" placeholder="Expiry Days" [(ngModel)]="product.expiryDays" min="0" />
       <input type="text" name="barcode" placeholder="Barcode" [(ngModel)]="product.barcode" />
     </div>
+
     <input type="text" name="createdAt" [(ngModel)]="product.createdAt" readonly />
+    
     <div class="form-buttons">
       <button type="submit">Save</button>
       <button type="button" (click)="backToProducts()">Back To Products</button>
