@@ -50,17 +50,16 @@ export class EditRelianceBillsComponent implements OnInit {
   private readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
   private readonly RELIANCE_ADDR =
     'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
-  
 
   billNumber = '';
   billDate: string = new Date().toISOString().substring(0, 10);
 
-  totalAmount = 0;     // sum of row totals
+  totalAmount = 0;     // sum of row totals (net)
   manualEmail = '';
   totalQuantity = 0;
-  totalItemPrice = 0;
-  receivedAmount: number = 0;   // user-entered value
-  balanceAmount: number = 0;    // computed balance
+  totalItemPrice = 0;  // sum of unit prices (MRP)
+  receivedAmount: number = 0;
+  balanceAmount: number = 0;
 
   copiesCount = 1; // number of copies to print
   private isPrinting = false;
@@ -99,12 +98,12 @@ export class EditRelianceBillsComponent implements OnInit {
         this.billNumber = billNumber;
         this.loadBillForEdit(billNumber);
       } else {
-        // If needed, ensure one blank row exists for editing
+        // Ensure one blank row exists for editing
         this.billItems.push({ productId: null, productName: '', quantity: 0, price: 0, total: 0, manualTotal: false });
       }
     });
 
-    // (Optional) load clients for future Name/Address use
+    // (Optional) load clients
     this.http.get<any[]>('http://localhost:3001/api/clients').subscribe({
       next: (data) => (this.clients = data),
       error: () => {}
@@ -143,16 +142,15 @@ export class EditRelianceBillsComponent implements OnInit {
           const pid = Number(it.productId ?? it.id ?? null);
           const qty = Number(it.quantity ?? 0);
           const price = Number(it.price ?? this.priceMap[pid] ?? 0);
-          const total = Number(it.total ?? qty * price);
+          const total = Number(it.total ?? qty * price * this.NET_FACTOR); // ensure net fallback
           const name = pid ? (this.namesWithUnitsMap[pid] || it.productName || '(Unknown)') : '';
-
-        return {
+          return {
             productId: pid,
             productName: name,
             quantity: qty,
             price,
             total,
-            manualTotal: !!it.manualTotal  // restore saved flag
+            manualTotal: !!it.manualTotal
           } as BillItem;
         });
 
@@ -219,7 +217,6 @@ export class EditRelianceBillsComponent implements OnInit {
       const nameWithUnits = selectedProduct.name + (selectedProduct.units ? ' ' + selectedProduct.units : '');
       item.productName = nameWithUnits;
 
-      // always take the mapped price for the newly selected product
       const dbPrice =
         this.priceMap[selectedId as number] ??
         Number((selectedProduct as any).mrp ?? (selectedProduct as any).price ?? 0);
@@ -242,7 +239,7 @@ export class EditRelianceBillsComponent implements OnInit {
       // net amount = qty * mrp * 0.85
       it.total = +((qty * price) * this.NET_FACTOR).toFixed(2);
     } else {
-      // user entered net total -> derive mrp from it:
+      // user entered net total -> derive mrp:
       // netTotal = qty * mrp * 0.85  =>  mrp = netTotal / (qty * 0.85)
       if (qty > 0 && isFinite(qty)) {
         it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
@@ -302,29 +299,15 @@ export class EditRelianceBillsComponent implements OnInit {
     return it.productName || '';
   }
 
-  /** Build A4 print HTML (no preview window) */
-  private buildPrintHtml(validItems: BillItem[]): string {
-    const totalUnitPrice = validItems.reduce((sum, it) => sum + (it.price ?? 0), 0);
-
-    const rows = validItems.map((it, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${this.displayName(it)}</td>
-        <td>${it.quantity ?? 0}</td>
-        <td>₹ ${this.fmt(it.price ?? 0)}</td>
-        <td>₹ ${this.fmt(it.total ?? 0)}</td>
-      </tr>
-    `).join('');
-
-    const styles = `
+  /** ---------- Shared CSS (single source of truth) ---------- */
+  private getInvoiceStyles(): string {
+    return `
       <style>
         @page { size: A4; margin: 10mm; }
-        @media print {
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        }
+        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
         body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
         h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
-        p { margin:5px 0; font-size:13px; color:#546e7a; }
+        p { margin:5px 0; font-size:12px; color:#546e7a; }
 
         .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
         .tax-parties {
@@ -352,8 +335,27 @@ export class EditRelianceBillsComponent implements OnInit {
         .box-body { padding:6px 8px; font-size:12px; }
         .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
         .amount-grid .v { text-align:right; }
+
+        /* Multi-copy helpers */
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
       </style>
     `;
+  }
+
+  /** ---------- Shared BODY (used by both print and email) ---------- */
+  private buildInvoiceBody(validItems: BillItem[]): string {
+    const totalUnitPrice = validItems.reduce((sum, it) => sum + (it.price ?? 0), 0);
+
+    const rows = validItems.map((it, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${this.displayName(it)}</td>
+        <td>${it.quantity ?? 0}</td>
+        <td>₹ ${this.fmt(it.price ?? 0)}</td>
+        <td>₹ ${this.fmt(it.total ?? 0)}</td>
+      </tr>
+    `).join('');
 
     const totalRow = `
       <tr class="total-row no-repeat">
@@ -391,10 +393,10 @@ export class EditRelianceBillsComponent implements OnInit {
       </div>
     `;
 
-    return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>
+    return `
       <div class="header" style="text-align:right;">
         <h1>J.T. Fruits &amp; Vegetables</h1>
-        <p>Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</p>
+        <p>Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai, Maharashtra 400101</p>
         <p>PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</p>
         <p>Email: jkumarshahu5@gmail.com</p>
       </div>
@@ -430,40 +432,34 @@ export class EditRelianceBillsComponent implements OnInit {
       </table>
 
       ${boxes}
-    </body></html>`;
+    `;
   }
 
-  /** Build multi-copy HTML by repeating the single-page body with page breaks */
+  /** Build A4 HTML (single copy) — used for both email PDF and as base for print */
+  private buildPrintHtml(validItems: BillItem[]): string {
+    const styles = this.getInvoiceStyles();
+    const body   = this.buildInvoiceBody(validItems);
+    return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>${body}</body></html>`;
+  }
+
+  /** Build multi-copy HTML — repeats same BODY with styles intact */
   private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
-    const single = this.buildPrintHtml(validItems); // your existing single-page HTML
-    const bodyMatch = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : single;
-
-    const styles = `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        body { margin: 0; }
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>
-    `;
-
-    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
+    const styles = this.getInvoiceStyles();
+    const body   = this.buildInvoiceBody(validItems);
+    const pages  = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
 
     return `
       <!doctype html>
       <html>
-        <head><meta charset="utf-8"/><title>Invoice ${this.billNumber}</title>${styles}</head>
+        <head><meta charset="utf-8">${styles}<title>Invoice ${this.billNumber}</title></head>
         <body>${pages}</body>
       </html>`;
   }
 
-  /** PRINT — supports multiple copies. Electron first; hidden-iframe fallback. */
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
 
-    // Flush focused control so ngModel has latest values (prevents stale amounts)
+    // Flush focused control so ngModel has latest values
     try {
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
@@ -508,7 +504,10 @@ export class EditRelianceBillsComponent implements OnInit {
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
 
       // Build multi-copy HTML (N pages in one job)
-      const html = this.buildPrintHtmlMulti(validItems, copies);
+      const html = typeof (this as any).buildPrintHtmlMulti === 'function'
+      ? this.buildPrintHtmlMulti(validItems, copies)
+      : this.buildPrintHtml(validItems);
+
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
@@ -533,43 +532,63 @@ export class EditRelianceBillsComponent implements OnInit {
     } finally {
       this.isPrinting = false;
 
-      // Gentle refocus to avoid input/keyboard freeze after driver dialog
+      // Gentle refocus after driver dialog
       setTimeout(() => {
         try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
         try { window.focus(); } catch {}
       }, 40);
 
-      // Ask main process for a single soft nudge (no minimize/restore loops)
       try { await (window as any).electron?.refocusHard?.(); } catch {}
     }
   }
-    
+
+  // ---- Email helpers
+  private parseEmails(raw: string): string[] {
+    if (!raw) return [];
+    return raw
+      .split(/[,\s]+/)
+      .map(e => e.trim())
+      .filter(Boolean);
+  }
+
+  private isValidEmail(e: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  }
+
   emailBill(): void {
     this.ensureRelianceDefaults();
 
-    // Validate rows
     const validItems = this.billItems.filter(
-      it => it.productId !== null && (it.productName || this.namesWithUnitsMap[it.productId!]) && it.quantity > 0
+      it => it.productId !== null &&
+            (it.productName || this.namesWithUnitsMap[it.productId!]) &&
+            it.quantity > 0
     );
     if (!validItems.length) {
       this.toast.warn('No valid items to email. Please add at least one valid item.');
       return;
     }
-    if (!this.manualEmail || !this.manualEmail.includes('@')) {
-      this.toast.warn('Please enter a valid email address.');
+
+    const recipients = this.parseEmails(this.manualEmail);
+    if (!recipients.length) {
+      this.toast.warn('Please enter at least one email address.');
       return;
     }
 
-    // Normalize items like print does (derive totals/prices consistently)
+    const invalid = recipients.filter(e => !this.isValidEmail(e));
+    if (invalid.length) {
+      this.toast.warn(`Invalid email${invalid.length > 1 ? 's' : ''}: ${invalid.join(', ')}`);
+      return;
+    }
+    const to = Array.from(new Set(recipients));
+
+    // Normalize items with the SAME NET logic as print
     const normalized = validItems.map(it => {
       const qty = Number(it.quantity || 0);
       if (it.manualTotal) {
         if (qty > 0 && isFinite(qty)) {
-          // mrp from net total
           it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
         }
       } else {
-        // net total with 15% reduction
         it.total = +((qty * Number(it.price || 0)) * this.NET_FACTOR).toFixed(2);
       }
       const prod = this.products.find(p => p.id === it.productId);
@@ -577,11 +596,10 @@ export class EditRelianceBillsComponent implements OnInit {
       return it;
     });
 
-    // Recompute page totals for the PDF
     this.totalQuantity = normalized.reduce((a, it) => a + (it.quantity || 0), 0);
     this.totalAmount   = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
 
-    // Build the same print HTML
+    // SAME HTML/CSS as print
     const pdfHtml = this.buildPrintHtml(normalized);
 
     const billData = {
@@ -591,7 +609,7 @@ export class EditRelianceBillsComponent implements OnInit {
       billDate: this.billDate,
       totalAmount: this.totalAmount,
       billItems: normalized,
-      email: this.manualEmail,
+      to,
       billType: 'reliance',
       pdfHtml
     };

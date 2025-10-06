@@ -168,7 +168,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         amount: this.amount || 0,
         discount: this.discount || 0,
         finalAmount: this.finalAmount
-      }, copies);
+      });
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
@@ -209,7 +209,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     amount: number;
     discount: number;
     finalAmount: number;
-  }, copies: number = 1): string {
+  }): string {
     const esc = (s: string) =>
       (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -235,10 +235,8 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
           font-family: 'Poppins','Segoe UI',Tahoma,sans-serif;
           background: #ffffff;
           color: #2c3e50;
-          page-break-after: always;
+          page-break-after: auto; /* 👈 changed from 'always' */
         }
-        .page:last-child { page-break-after: auto; }
-
         .top-section { text-align: center; margin-bottom: 12px; }
         .title { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 6px; }
         .address-line,.license-line,.email-line { font-size: 13px; color: #546e7a; margin: 2px 0; }
@@ -319,9 +317,9 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         </div>
       </div>`;
 
-    const pages = Array.from({ length: Math.max(1, copies) }, () => onePage).join('\n');
-
-    return `<!doctype html><html><head><meta charset="utf-8"/><title>Lumpsum Invoice ${esc(meta.billNumber)}</title>${styles}</head><body>${pages}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8"/>
+      <title>Lumpsum Invoice ${esc(meta.billNumber)}</title>${styles}
+    </head><body>${onePage}</body></html>`;
   }
 
   private async printHtmlInHiddenIframe(html: string): Promise<void> {

@@ -866,43 +866,63 @@ app.post('/api/login', (req, res) => {
 app.post('/api/send-bill', async (req, res) => {
   const bill = req.body || {};
   const {
-    // required for sending
+    // New, preferred:
+    to,
+    // Legacy:
     email,
+    // Optional
+    cc,
+    bcc,
     pdfHtml,
-
-    // optional cosmetics / metadata
     subject = `Invoice - ${bill.billNumber || 'JT'}`,
     filename = `Invoice-${bill.billNumber || 'JT'}.pdf`,
-
-    // optional: used for the plain-text body
     billNumber,
     clientName,
     billDate,
     totalAmount,
     discount,
     finalAmount,
-    cc,
-    bcc,
   } = bill;
 
-  if (!email) return res.status(400).json({ message: 'Missing recipient email' });
-  if (!pdfHtml) return res.status(400).json({ message: 'Missing pdfHtml' });
+  // ---- normalize recipients ----
+  const normalizeList = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      return val.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
 
-  // Mail transport (use env vars; do NOT hard-code secrets)
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.MAIL_USER || 'jkumarshahu5@gmail.com',
-      pass: process.env.MAIL_PASS || 'vobd eiax vdrd yvbh',
-    },
+  const recipients = [
+    ...normalizeList(to),
+    ...normalizeList(email)   // support old 'email' field too
+  ];
+
+  // de-dupe, basic validation
+  const seen = new Set();
+  const validRecipients = recipients.filter(addr => {
+    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
+    if (!ok) return false;
+    if (seen.has(addr.toLowerCase())) return false;
+    seen.add(addr.toLowerCase());
+    return true;
   });
+
+  if (!validRecipients.length) {
+    return res.status(400).json({ message: 'Missing or invalid recipient email(s)' });
+  }
+  if (!pdfHtml) {
+    return res.status(400).json({ message: 'Missing pdfHtml' });
+  }
+
+  // Use your existing transporter (or the createMailTransporter() you already wrote)
+  const transporter = createMailTransporter();
 
   let browser;
   try {
-    // Render HTML → PDF
-    browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox'], // keep if your host needs it
-    });
+    // HTML → PDF (unchanged)
+    browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
     await page.setContent(pdfHtml, { waitUntil: 'networkidle0' });
@@ -913,7 +933,6 @@ app.post('/api/send-bill', async (req, res) => {
       margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
     });
 
-    // Simple text body (kept lightweight)
     const textSummary =
 `Dear ${clientName || 'Customer'},
 
@@ -924,20 +943,15 @@ ${typeof totalAmount === 'number' ? `Total: ₹${Number(totalAmount).toLocaleStr
 Regards,
 J.T. Fruits & Vegetables`;
 
-    // Send email with PDF attachment
     await transporter.sendMail({
-      from: process.env.MAIL_USER,
-      to: email,
-      cc,
-      bcc,
+      from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
+      to: validRecipients.join(','),   // multiple recipients
+      cc,                              // optional (string or comma-separated)
+      bcc,                             // optional
       subject,
       text: textSummary,
       attachments: [
-        {
-          filename,
-          content: pdfBuffer,
-          contentType: 'application/pdf',
-        },
+        { filename, content: pdfBuffer, contentType: 'application/pdf' }
       ],
     });
 
@@ -946,9 +960,7 @@ J.T. Fruits & Vegetables`;
     console.error('Email sending failed:', error);
     return res.status(500).json({ message: 'Failed to send email' });
   } finally {
-    if (browser) {
-      try { await browser.close(); } catch {}
-    }
+    if (browser) { try { await browser.close(); } catch {} }
   }
 });
 

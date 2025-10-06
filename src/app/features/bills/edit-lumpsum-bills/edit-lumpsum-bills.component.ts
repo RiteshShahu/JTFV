@@ -182,7 +182,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
 
       this.calculateFinalAmount();
 
-      // Build multi-copy HTML (N pages)
+      // Build single-page HTML (copies handled by Electron only)
       const html = this.buildPrintHtml({
         clientName: this.clientName || '',
         address: this.address || '',
@@ -192,7 +192,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
         amount: this.amount || 0,
         discount: this.discount || 0,
         finalAmount: this.finalAmount
-      }, copies);
+      });
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;
@@ -277,7 +277,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
       setTimeout(() => document.body.removeChild(iframe), 1000);
     }
   }
-
+  
   private buildPrintHtml(meta: {
     clientName: string;
     address: string;
@@ -287,15 +287,13 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
     amount: number;
     discount: number;     // percent
     finalAmount: number;  // may be precomputed; recompute defensively
-  }, copies: number = 1): string {
+  }): string {
     const esc = (s: string) =>
       (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
     const fmt = (n: number) =>
-      new Intl.NumberFormat('en-IN', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-      }).format(isFinite(n as number) ? Number(n) : 0);
+      new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        .format(isFinite(n as number) ? Number(n) : 0);
 
     const dateStr = this.formatDateDDMMYYYY(meta.billDate);
 
@@ -320,9 +318,8 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
           font-family: 'Poppins','Segoe UI',Tahoma,sans-serif;
           background: #ffffff;
           color: #2c3e50;
-          page-break-after: always;
+          page-break-after: auto; /* single page */
         }
-        .page:last-child { page-break-after: auto; }
 
         .top-section { text-align: center; margin-bottom: 12px; }
         .title { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 6px; }
@@ -338,11 +335,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
           font-size: 14px;
         }
         .left-info .line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-        .gst-no {
-          font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
-          font-size: 16px;
-          letter-spacing: 1px;
-        }
+        .gst-no { font-family: "Consolas","Roboto Mono","Liberation Mono",monospace; font-size: 16px; letter-spacing: 1px; }
         .left-info label { font-weight: 700; white-space: nowrap; }
 
         .right-meta .meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -411,8 +404,6 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
         </div>
       </div>`;
 
-    const pages = Array.from({ length: Math.max(1, copies) }, () => onePage).join('\n');
-
     return `
       <!doctype html>
       <html>
@@ -421,7 +412,7 @@ export class EditLumpsumBillsComponent implements OnInit, AfterViewInit {
           <title>Lumpsum Invoice ${esc(meta.billNumber)}</title>
           ${styles}
         </head>
-        <body>${pages}</body>
+        <body>${onePage}</body>
       </html>`;
   }
 

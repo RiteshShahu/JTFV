@@ -310,21 +310,9 @@ export class RelianceBillsComponent implements OnInit {
     return (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
-  /** Build print HTML (A4 with no preview dialog customizations) */
-  private buildPrintHtml(validItems: BillItem[]): string {
-    const totalUnitPrice = validItems.reduce((sum, it) => sum + (it.price ?? 0), 0);
-
-    const rows = validItems.map((it, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${this.displayName(it)}</td>
-        <td>${it.quantity ?? 0}</td>
-        <td>₹ ${this.fmt(it.price ?? 0)}</td>
-        <td>₹ ${this.fmt(it.total ?? 0)}</td>
-      </tr>
-    `).join('');
-
-    const styles = `
+  /** ---------- NEW: single source of truth for CSS ---------- */
+  private getInvoiceStyles(): string {
+    return `
       <style>
         @page { size: A4; margin: 10mm; }
         @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
@@ -358,8 +346,27 @@ export class RelianceBillsComponent implements OnInit {
         .box-body { padding:6px 8px; font-size:12px; }
         .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
         .amount-grid .v { text-align:right; }
+
+        /* Multi-copy helpers */
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
       </style>
     `;
+  }
+
+  /** ---------- NEW: build ONLY the BODY to reuse in email & print ---------- */
+  private buildInvoiceBody(validItems: BillItem[]): string {
+    const totalUnitPrice = validItems.reduce((sum, it) => sum + (it.price ?? 0), 0);
+
+    const rows = validItems.map((it, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${this.displayName(it)}</td>
+        <td>${it.quantity ?? 0}</td>
+        <td>₹ ${this.fmt(it.price ?? 0)}</td>
+        <td>₹ ${this.fmt(it.total ?? 0)}</td>
+      </tr>
+    `).join('');
 
     const totalRow = `
       <tr class="total-row no-repeat">
@@ -397,7 +404,7 @@ export class RelianceBillsComponent implements OnInit {
       </div>
     `;
 
-    return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>
+    return `
       <div class="header" style="text-align:right;">
         <h1>J.T. Fruits &amp; Vegetables</h1>
         <p>Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</p>
@@ -436,31 +443,26 @@ export class RelianceBillsComponent implements OnInit {
       </table>
 
       ${boxes}
-    </body></html>`;
+    `;
   }
 
-  /** Build multi-copy HTML by repeating the single-page body with page breaks */
+  /** Build print/email HTML (single copy) — uses shared CSS + BODY */
+  private buildPrintHtml(validItems: BillItem[]): string {
+    const styles = this.getInvoiceStyles();
+    const body   = this.buildInvoiceBody(validItems);
+    return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>${body}</body></html>`;
+  }
+
+  /** Build multi-copy HTML by repeating the same BODY with page breaks — styles kept */
   private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
-    const single = this.buildPrintHtml(validItems); // your existing single-page HTML
-    const bodyMatch = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = bodyMatch ? bodyMatch[1] : single;
-
-    const styles = `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        body { margin: 0; }
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>
-    `;
-
-    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
+    const styles = this.getInvoiceStyles();
+    const body   = this.buildInvoiceBody(validItems);
+    const pages  = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
 
     return `
       <!doctype html>
       <html>
-        <head><meta charset="utf-8"/>${styles}<title>Invoice ${this.billNumber}</title></head>
+        <head><meta charset="utf-8">${styles}<title>Invoice ${this.billNumber}</title></head>
         <body>${pages}</body>
       </html>`;
   }
@@ -545,21 +547,50 @@ export class RelianceBillsComponent implements OnInit {
     }
   }
 
+  // Add near the top of the class:
+  private parseEmails(raw: string): string[] {
+    if (!raw) return [];
+    return raw
+      .split(/[,\s]+/)              // split by comma OR whitespace
+      .map(e => e.trim())
+      .filter(Boolean);
+  }
+
+  private isValidEmail(e: string): boolean {
+    // simple, permissive email check
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+  }
+
   emailBill(): void {
     this.ensureRelianceDefaults();
 
+    // 1) Basic items validation (same as before)
     const validItems = this.billItems.filter(
-      it => it.productId !== null && (it.productName || this.namesWithUnitsMap[it.productId!]) && it.quantity > 0
+      it => it.productId !== null &&
+            (it.productName || this.namesWithUnitsMap[it.productId!]) &&
+            it.quantity > 0
     );
     if (!validItems.length) {
-      this.toast.warn('No valid items to email. Please add at least one valid item.');
-      return;
-    }
-    if (!this.manualEmail || !this.manualEmail.includes('@')) {
-      this.toast.warn('Please enter a valid email address.');
+      this.toast.warn('Please enter at least one valid item.');
       return;
     }
 
+    // 2) Parse multiple emails
+    const recipients = this.parseEmails(this.manualEmail);
+    if (!recipients.length) {
+      this.toast.warn('Please enter at least one email address.');
+      return;
+    }
+
+    // 3) Validate, de-dupe
+    const invalid = recipients.filter(e => !this.isValidEmail(e));
+    if (invalid.length) {
+      this.toast.warn(`Invalid email${invalid.length > 1 ? 's' : ''}: ${invalid.join(', ')}`);
+      return;
+    }
+    const uniqueRecipients = Array.from(new Set(recipients));
+
+    // 4) Normalize items (same logic you had)
     const normalized = validItems.map(it => {
       const qty = Number(it.quantity || 0);
       if (it.manualTotal) {
@@ -575,8 +606,10 @@ export class RelianceBillsComponent implements OnInit {
     this.totalQuantity = normalized.reduce((a, it) => a + (it.quantity || 0), 0);
     this.totalAmount   = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
 
+    // 5) Build PDF HTML with the SAME CSS + BODY as print
     const pdfHtml = this.buildPrintHtml(normalized);
 
+    // 6) Send
     const billData = {
       clientName: this.clientName,
       address: this.address,
@@ -584,7 +617,7 @@ export class RelianceBillsComponent implements OnInit {
       billDate: this.billDate,
       totalAmount: this.totalAmount,
       billItems: normalized,
-      email: this.manualEmail,
+      to: uniqueRecipients,
       billType: 'reliance',
       pdfHtml
     };

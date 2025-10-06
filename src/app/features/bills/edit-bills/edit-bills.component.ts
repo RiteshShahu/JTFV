@@ -419,35 +419,33 @@ export class EditBillsComponent implements OnInit {
     },
     copies: number
   ): string {
+    // Build the single HTML that already includes the full CSS.
     const single = this.buildPrintHtml(items, meta);
-    const match = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const bodyContent = match ? match[1] : single;
 
-    const styles = `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        body { margin: 0; }
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>
-    `;
+    // Extract the original <head> and <body> content so we can repeat the body.
+    const headMatch = single.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+    const bodyMatch = single.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    const head = headMatch ? headMatch[1] : '';
+    const body = bodyMatch ? bodyMatch[1] : single; // fallback
 
-    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${bodyContent}</div>`).join('\n');
+    // Repeat the same styled body N times, adding only page-break helpers.
+    const pages = Array.from({ length: Math.max(1, copies) },
+      () => `<div class="page">${body}</div>`).join('\n');
 
     return `
       <!doctype html>
       <html>
         <head>
-          <meta charset="utf-8"/>
-          <title>Invoice ${meta.billNumber}</title>
-          ${styles}
+          ${head}
+          <style>
+            .page { page-break-after: always; }
+            .page:last-child { page-break-after: auto; }
+          </style>
         </head>
         <body>${pages}</body>
-      </html>
-    `;
+      </html>`;
   }
-  
+    
   /** ===== Email & Save ===== */
   emailBill(): void {
     const validItems = this.billItems.filter(
