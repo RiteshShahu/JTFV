@@ -23,7 +23,7 @@
   padding: 20px;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  margin-bottom: 30px;
+  margin-bottom: 18px; /* slightly tighter to bring totals card closer */
 }
 
 /* Label */
@@ -42,6 +42,7 @@
 
 /* Inputs + Selects */
 .search-section input[type="date"],
+.search-section input[type="text"],
 .search-section select {
   padding: 10px 14px;
   font-size: 15px;
@@ -54,6 +55,7 @@
 
 /* Focus State */
 .search-section input[type="date"]:focus,
+.search-section input[type="text"]:focus,
 .search-section select:focus {
   outline: none;
   border-color: #3f51b5;
@@ -88,6 +90,41 @@ button.button:hover {
   transform: translateY(-2px);
 }
 
+/* NEW: Totals card */
+.product-totals { margin: 10px 0 16px; }
+.totals-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafafa;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.totals-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #2c3e50;
+}
+.totals-title .badge {
+  background: #eef;
+  border: 1px solid #cdd;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.totals-values {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: #34495e;
+}
+.totals-values strong { font-weight: 700; }
+
 /* Product Count / Messages */
 .product-count {
   font-size: 15px;
@@ -98,9 +135,7 @@ button.button:hover {
 }
 
 /* Table Container */
-.excel-table-container {
-  margin-top: 20px;
-}
+.excel-table-container { margin-top: 20px; }
 
 /* Table Styles */
 .excel-table {

@@ -24,9 +24,61 @@
       <input id="toDate" type="date" [(ngModel)]="dateTo" (change)="onDateChange()" />
     </div>
 
+    <!-- Product filter (from DB) -->
+    <div class="form-group">
+      <label for="prodSelect">Product (from DB)</label>
+      <!-- Use [(ngModel)] + [ngValue] so we get number|null directly and avoid $event.target -->
+      <select
+        id="prodSelect"
+        [(ngModel)]="selectedNameId"
+        (ngModelChange)="onSelectNameId($event)"
+      >
+        <option [ngValue]="null">-- Select Product --</option>
+        <option *ngFor="let p of (products$ | async)" [ngValue]="p.id">
+          {{ p.name }} <ng-container *ngIf="p.units">({{ p.units }})</ng-container>
+        </option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="styleSelect">Style</label>
+      <select id="styleSelect" [(ngModel)]="styleFilter" (change)="onStyleChange()">
+        <option value="">All</option>
+        <option value="reliance">Reliance</option>
+        <option value="dmart">D-Mart</option>
+      </select>
+    </div>
+
     <div class="button-group">
       <button class="button" (click)="reloadSummary()">Refresh</button>
       <button class="button" routerLink="/barcode">Back To Barcode</button>
+    </div>
+  </div>
+
+  <!-- Totals chip/card for selected product & date window -->
+  <div class="product-totals" *ngIf="productTotals$ | async as t">
+    <div class="totals-card">
+      <div class="totals-title">
+        Product totals for
+        <b *ngIf="selectedProductLabel; else noProdSelected">
+          {{ selectedProductLabel }}
+        </b>
+        <ng-template #noProdSelected><b>—</b></ng-template>
+        from <b>{{ formatDDMMYYYY(dateFrom || '') }}</b> to <b>{{ formatDDMMYYYY(dateTo || '') }}</b>
+        <span class="badge">{{ field === 'packedOnDate' ? 'Packed On' : 'Printed On' }}</span>
+      </div>
+
+      <div class="totals-values" *ngIf="t; else noTotalsYet">
+        <span><strong>{{ t.totalLabels }}</strong> labels</span>
+        <span>•</span>
+        <span>MRP: <strong>₹{{ t.totalMrp | number:'1.2-2' }}</strong></span>
+        <span>•</span>
+        <span>Final (15%): <strong>₹{{ t.finalAmount | number:'1.2-2' }}</strong></span>
+      </div>
+
+      <ng-template #noTotalsYet>
+        <div class="totals-values">—</div>
+      </ng-template>
     </div>
   </div>
 

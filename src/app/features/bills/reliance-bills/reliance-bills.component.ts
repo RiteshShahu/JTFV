@@ -60,6 +60,8 @@ export class RelianceBillsComponent implements OnInit {
   shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
   shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
 
+  private readonly NET_FACTOR = 0.85; // 15% reduction
+
   // Constants
   private readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
   private readonly RELIANCE_ADDR =
@@ -237,10 +239,13 @@ export class RelianceBillsComponent implements OnInit {
     const price = Number(it.price || 0);
 
     if (!it.manualTotal) {
-      it.total = +((qty * price)).toFixed(2);
+      // net = qty * mrp * 0.85
+      it.total = +((qty * price) * this.NET_FACTOR).toFixed(2);
     } else {
+      // user typed NET (sales amount) → derive mrp:
+      // net = qty * mrp * 0.85  =>  mrp = net / (qty * 0.85)
       if (qty > 0 && isFinite(qty)) {
-        it.price = +((Number(it.total || 0) / qty)).toFixed(2);
+        it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
       }
     }
     this.calculateTotalAmount();
@@ -249,10 +254,12 @@ export class RelianceBillsComponent implements OnInit {
   onSalesAmountInput(index: number): void {
     const it = this.billItems[index];
     it.manualTotal = true;
+
     const qty = Number(it.quantity || 0);
-    const manualTotal = Number(it.total || 0);
+    const netTotal = Number(it.total || 0);
     if (qty > 0 && isFinite(qty)) {
-      it.price = +((manualTotal / qty)).toFixed(2);
+      // mrp from NET
+      it.price = +((netTotal / (qty * this.NET_FACTOR))).toFixed(2);
     }
     this.calculateTotalAmount();
   }
@@ -263,16 +270,19 @@ export class RelianceBillsComponent implements OnInit {
     items.forEach(it => {
       const qty = Number(it.quantity || 0);
       const price = Number(it.price || 0);
+
       if (!it.manualTotal) {
-        it.total = +((qty * price)).toFixed(2);
+        // compute NET from qty & mrp
+        it.total = +((qty * price) * this.NET_FACTOR).toFixed(2);
       } else if (qty > 0 && isFinite(qty)) {
-        it.price = +((Number(it.total || 0) / qty)).toFixed(2);
+        // keep NET fixed, adjust mrp so that qty*mrp*0.85 = total
+        it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
       }
     });
 
     this.totalQuantity  = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
-    this.totalItemPrice = +items.reduce((acc, it) => acc + (it.price || 0), 0).toFixed(2);
-    this.totalAmount    = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2);
+    this.totalItemPrice = +items.reduce((acc, it) => acc + (it.price || 0), 0).toFixed(2); // sum of mrps
+    this.totalAmount    = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2); // sum of NET
 
     this.balanceAmount  = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
   }
@@ -488,11 +498,16 @@ export class RelianceBillsComponent implements OnInit {
         .map(it => {
           const prod = this.products.find(p => p.id === it.productId);
           if (prod) it.productName = prod.name + (prod.units ? ' ' + prod.units : '');
+
           const qty = Number(it.quantity || 0);
           if (it.manualTotal) {
-            if (qty > 0 && isFinite(qty)) it.price = +((Number(it.total || 0) / qty)).toFixed(2);
+            // user kept NET; derive mrp to match NET = qty*mrp*0.85
+            if (qty > 0 && isFinite(qty)) {
+              it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+            }
           } else {
-            it.total = +((qty * Number(it.price || 0))).toFixed(2);
+            // compute NET from qty & mrp
+            it.total = +((qty * Number(it.price || 0)) * this.NET_FACTOR).toFixed(2);
           }
           return it;
         });
@@ -594,9 +609,11 @@ export class RelianceBillsComponent implements OnInit {
     const normalized = validItems.map(it => {
       const qty = Number(it.quantity || 0);
       if (it.manualTotal) {
-        if (qty > 0 && isFinite(qty)) it.price = +((Number(it.total || 0) / qty)).toFixed(2);
+        if (qty > 0 && isFinite(qty)) {
+          it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+        }
       } else {
-        it.total = +((qty * Number(it.price || 0))).toFixed(2);
+        it.total = +((qty * Number(it.price || 0)) * this.NET_FACTOR).toFixed(2);
       }
       const prod = this.products.find(p => p.id === it.productId);
       it.productName = prod ? prod.name + (prod.units ? ' ' + prod.units : '') : (it.productName || '');

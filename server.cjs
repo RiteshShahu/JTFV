@@ -837,6 +837,98 @@ app.get('/api/label-prints/jobs-by-day', (req, res) => {
   });
 });
 
+// NEW: Product totals between from..to with filters
+function normalizeStyle(s) {
+  const v = String(s || '').trim().toLowerCase().replace(/\s+/g, '');
+  if (!v) return '';
+  // Map common variants to canonical keys
+  if (v.startsWith('rel')) return 'reliance';
+  // dmart variants: "dmart", "d-mart", "old-dmart", "old dmart"
+  if (v.includes('mart')) return 'dmart';
+  return '';
+}
+
+app.get('/api/label-prints/product-totals', (req, res) => {
+  const from  = (req.query.from  || '').toString();
+  const to    = (req.query.to    || '').toString();
+  const field = req.query.field === 'createdAt' ? 'createdAt' : 'packedOnDate';
+  const nameId = req.query.nameId ? Number(req.query.nameId) : null;
+  const productName = (req.query.productName || '').toString();
+  const printStyle = normalizeStyle(req.query.printStyle); // robust normalize
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+    return res.status(400).json({ error: 'from/to must be YYYY-MM-DD' });
+  }
+  if (nameId == null && !productName) {
+    return res.status(400).json({ error: 'Provide nameId or productName' });
+  }
+
+  let where = '';
+  const params = [];
+
+  if (field === 'createdAt') {
+    where += `DATE(datetime(j.createdAt,'localtime')) BETWEEN date(?) AND date(?)`;
+    params.push(from, to);
+  } else {
+    where += `i.packedOnDate BETWEEN ? AND ?`;
+    params.push(from, to);
+  }
+
+  if (nameId != null) {
+    where += ` AND i.nameId = ?`;
+    params.push(nameId);
+  } else {
+    where += ` AND LOWER(i.productName) = LOWER(?)`;
+    params.push(productName);
+  }
+
+  // 🔎 Debug: see what style the server received
+  console.log('[product-totals] style=', printStyle);
+
+  // ✅ Style filter (covers many stored variants)
+  if (printStyle === 'reliance') {
+    where += ` AND LOWER(REPLACE(j.printStyle,' ','')) LIKE 'reliance%'`;
+  } else if (printStyle === 'dmart') {
+    // Match: 'dmart', 'old-dmart', 'old dmart', 'd-mart'
+    where += `
+      AND (
+        LOWER(REPLACE(j.printStyle,'-','')) = 'dmart'
+        OR LOWER(REPLACE(j.printStyle,'-','')) = 'olddmart'
+        OR LOWER(REPLACE(REPLACE(j.printStyle,'-',''),' ','')) = 'dmart'
+        OR LOWER(REPLACE(REPLACE(j.printStyle,'-',''),' ','')) = 'olddmart'
+        OR LOWER(REPLACE(j.printStyle,'-','')) = 'dmartstyle' -- if ever saved like this
+      )`;
+  }
+
+  const sql = `
+    SELECT
+      SUM(i.quantity)             AS totalLabels,
+      SUM(i.mrp * i.quantity)     AS totalMrp
+    FROM print_job_items i
+    JOIN print_jobs j ON j.id = i.jobId
+    WHERE ${where}
+  `;
+
+  db.get(sql, params, (err, row) => {
+    if (err) {
+      console.error('product-totals query failed:', err);
+      return res.status(500).json({ error: 'Query failed' });
+    }
+
+    const totalLabels = Number(row?.totalLabels || 0);
+    const totalMrp    = Number(row?.totalMrp || 0);
+
+    res.json({
+      from, to, field,
+      nameId: nameId ?? null,
+      productName: nameId != null ? null : (productName || null),
+      totalLabels,
+      totalMrp,
+      finalAmount: Math.round(totalMrp * 0.85 * 100) / 100,
+    });
+  });
+});
+
 // ==================== AUTH ROUTES ====================
 app.post('/api/register', (req, res) => {
   const { email, password } = req.body;

@@ -11,6 +11,8 @@ export type DayTotalsRow = {
   totalMrp: number;
 };
 
+export type PrintStyle = 'reliance' | 'dmart';
+
 /** ✅ Export the shapes used by component & service */
 export type FieldFilter = 'createdAt' | 'packedOnDate';
 
@@ -111,5 +113,20 @@ export class LabelPrintsService {
   getJobsForDay(date: string, field: FieldFilter) {
     const params = new HttpParams().set('date', date).set('field', field);
     return this.http.get<JobRow[]>(`${this.base}/jobs-by-day`, { params });
+  }
+
+  getProductTotals(
+    from: string, to: string, field: FieldFilter,
+    opts: { nameId?: number; productName?: string; printStyle?: PrintStyle }
+  ) {
+    let params = new HttpParams().set('from', from).set('to', to).set('field', field);
+    if (opts.nameId != null) params = params.set('nameId', String(opts.nameId));
+    if (opts.productName)    params = params.set('productName', opts.productName);
+    if (opts.printStyle)     params = params.set('printStyle', opts.printStyle); // ✅ pass style
+    return this.http.get<{
+      from: string; to: string; field: FieldFilter;
+      nameId: number | null; productName: string | null;
+      totalLabels: number; totalMrp: number; finalAmount: number;
+    }>(`${this.base}/product-totals`, { params });
   }
 }
