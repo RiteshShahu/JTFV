@@ -776,6 +776,129 @@ export class EditRelianceBillsComponent implements OnInit {
     }
   }
 
+  // --- Static helpers for Reports → Download PDF ---
+  private static readonly NET_FACTOR = 0.85;
+  private static readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
+  private static readonly RELIANCE_ADDR =
+    'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
+
+  private static inr(n: number): string {
+    return (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  private static amountInWords(num: number): string {
+    const a = ['', 'One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
+              'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const numToWords = (n: number): string => {
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '');
+      if (n < 1000) return a[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' and ' + numToWords(n%100) : '');
+      if (n < 100000) return numToWords(Math.floor(n/1000)) + ' Thousand' + (n%1000 ? ' ' + numToWords(n%1000) : '');
+      if (n < 10000000) return numToWords(Math.floor(n/100000)) + ' Lakh' + (n%100000 ? ' ' + numToWords(n%100000) : '');
+      return '';
+    };
+    const rupees = Math.floor(num);
+    const paise = Math.round((num - rupees) * 100);
+    let words = `${numToWords(rupees)} Rupees`;
+    if (paise > 0) words += ` and ${numToWords(paise)} Paisa`;
+    return words + ' only';
+  }
+
+  private static styles(): string {
+    return `<style>
+      @page { size: A4; margin: 10mm; }
+      @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+      body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
+      h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
+      p { margin:5px 0; font-size:13px; color:#546e7a; }
+      .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
+      .tax-parties { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px;
+        padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9;
+        margin-bottom:12px; font-size:11px; }
+      .party-title { text-transform:uppercase; font-weight:700; margin-bottom:6px; }
+      .party-name { font-weight:600; margin-bottom:4px; }
+      .party-address { line-height:1.45; }
+      table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
+      th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
+      th { background:#757575 !important; color:#fff !important; font-weight:700; }
+      .total-row { background:#f4f6f8 !important; font-weight:700; }
+      .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; }
+      .box { border:1px solid #bdbdbd; }
+      .box-title { background:#757575; color:#fff; font-weight:700; padding:6px 8px; font-size:12px; }
+      .box-body { padding:6px 8px; font-size:12px; }
+      .page { page-break-after: always; } .page:last-child { page-break-after: auto; }
+    </style>`;
+  }
+
+  /** Static builder used by Reports → downloadPdf() */
+  static buildRelianceHtml(payload: {
+    billNumber: string; billDate: string;
+    clientName?: string; address?: string;
+    billItems: Array<{ productId: number|null; productName: string; quantity: number; price: number; total: number; manualTotal?: boolean }>;
+    totalAmount?: number; copies?: number; shipToName?: string; shipToAddress?: string;
+  }): string {
+    const copies = Math.max(1, Math.min(50, Math.floor(payload.copies ?? 1)));
+    const shipToName = payload.shipToName ?? 'FRESHPIK SPECTRA POWAI ( T5EP )';
+    const shipToAddress = payload.shipToAddress ?? 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+
+    const items = (payload.billItems || []).map(it => {
+      const qty = Number(it.quantity || 0);
+      if (!it.manualTotal) {
+        it.total = +((qty * Number(it.price || 0)) * EditRelianceBillsComponent.NET_FACTOR).toFixed(2);
+      } else if (qty > 0 && isFinite(qty)) {
+        it.price = +((Number(it.total || 0) / (qty * EditRelianceBillsComponent.NET_FACTOR))).toFixed(2);
+      }
+      return it;
+    });
+
+    const totalQty = items.reduce((a, it) => a + (Number(it.quantity) || 0), 0);
+    const totalPrice = +items.reduce((a, it) => a + (it.price || 0), 0).toFixed(2);
+    const totalAmount = +(payload.totalAmount ?? +items.reduce((a, it) => a + (it.total || 0), 0).toFixed(2));
+
+    const rows = items.map((it, i) => `
+      <tr><td>${i+1}</td><td>${it.productName}</td><td>${it.quantity}</td>
+      <td>₹ ${this.inr(it.price)}</td><td>₹ ${this.inr(it.total)}</td></tr>`).join('');
+
+    const body = `
+      <div class="header" style="text-align:right;">
+        <h1>J.T. Fruits &amp; Vegetables</h1>
+        <p>Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</p>
+        <p>PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</p>
+        <p>Email: jkumarshahu5@gmail.com</p>
+      </div>
+      <div class="invoice-title">Tax Invoice</div>
+      <div class="tax-parties">
+        <div><div class="party-title">Bill To</div>
+          <div class="party-name">${payload.clientName || this.RELIANCE_CLIENT}</div>
+          <div class="party-address">${payload.address || this.RELIANCE_ADDR}</div>
+        </div>
+        <div><div class="party-title">Ship To</div>
+          <div class="party-name">${shipToName}</div>
+          <div class="party-address">${shipToAddress}</div>
+        </div>
+        <div><div class="party-title">Invoice Details</div>
+          <div>Invoice No.: ${payload.billNumber}</div>
+          <div>Date: ${new Date(payload.billDate).toLocaleDateString('en-GB')}</div>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead>
+        <tbody>${rows}
+          <tr class="total-row"><td colspan="2">Total</td><td>${totalQty}</td>
+            <td>₹ ${this.inr(totalPrice)}</td><td>₹ ${this.inr(totalAmount)}</td></tr>
+        </tbody>
+      </table>
+      <div class="boxes">
+        <div class="box">
+          <div class="box-title">Invoice Amount In Words</div>
+          <div class="box-body">${this.amountInWords(totalAmount)}</div>
+        </div>
+      </div>`;
+    const pages = Array.from({ length: copies }).map(() => `<div class="page">${body}</div>`).join('');
+    return `<!doctype html><html><head><meta charset="utf-8">${this.styles()}<title>${payload.billNumber}</title></head><body>${pages}</body></html>`;
+  }
+
   /** Convert HTML to a data URL for Electron (UTF-8, no base64) */
   private htmlToDataUrl(html: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;

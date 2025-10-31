@@ -13,6 +13,8 @@ declare global {
   interface PrintResult {
     ok: boolean;
     error?: string;
+    /** Absolute path to the saved PDF (when applicable) */
+    path?: string;
   }
 
   interface CanonPrintOptions {
@@ -22,6 +24,18 @@ declare global {
 
   interface CitizenPrintOptions {
     copies?: number;
+  }
+
+  /** Options for saving a real A4 PDF to disk */
+  interface SavePdfOptions {
+    filename?: string;
+    landscape?: boolean;
+    margins?: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
   }
 
   interface Window {
@@ -40,6 +54,9 @@ declare global {
 
       /** Gently nudge focus back to the app after printing */
       refocusHard: () => Promise<void> | void;
+
+      /** Save a real A4 PDF to disk (Documents) from a data: URL of HTML */
+      savePdfA4?: (dataUrl: string, opts?: SavePdfOptions) => Promise<PrintResult>;
     };
   }
 }

@@ -19,6 +19,15 @@
 }
 .btn-edit:hover { background-color: #546e7a; transform: scale(1.05); }
 
+.badge-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+.badge-toggle.is-busy {
+  opacity: 0.6;
+  pointer-events: none; /* prevent double clicks while in-flight */
+}
+
 /* Existing Delete button */
 .btn-delete {
   background-color: #e53935;
@@ -193,20 +202,92 @@ tr.paid { opacity: 0.95; }
 .print-toggle .print-view { display: none; }
 
 /* Status badges */
-.badge[data-kind="paid"] {
-  background: #e6ffed;
-  color: #0a6b2f;
-  padding: 2px 8px;
-  border-radius: 999px;
+/* Base button */
+.status-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .35rem .75rem;
+  border-radius: 999px;        /* pill */
+  font-size: 0.9rem;
   font-weight: 600;
+  border: 1px solid transparent;
+  background: #f5f5f7;
+  color: #333;
+  cursor: pointer;
+  transition: transform .02s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+  line-height: 1.1;
 }
 
-.badge[data-kind="unpaid"] {
+/* Unpaid look */
+.status-btn[data-kind="unpaid"] {
   background: #fff5f5;
-  color: #9b1c1c;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: 600;
+  color: #b42318;               /* red-ish text */
+  border-color: #f3c5c3;
+}
+
+/* Unpaid hover/focus */
+.status-btn[data-kind="unpaid"]:hover:not(:disabled),
+.status-btn[data-kind="unpaid"]:focus-visible:not(:disabled) {
+  background: #ffe9e9;
+  box-shadow: 0 0 0 3px rgba(244, 63, 94, .15);
+  border-color: #eaa19d;
+}
+
+/* Paid look */
+.status-btn[data-kind="paid"] {
+  background: #ecfdf3;
+  color: #047857;               /* green-ish text */
+  border-color: #a7f3d0;
+}
+
+/* Paid hover/focus */
+.status-btn[data-kind="paid"]:hover:not(:disabled),
+.status-btn[data-kind="paid"]:focus-visible:not(:disabled) {
+  background: #dffaea;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, .18);
+  border-color: #86efac;
+}
+
+/* Download (PDF) button — green style */
+.btn-download {
+  background-color: #45a54a; /* green 700 */
+  color: #ffffff;
+  font-weight: bold;
+  padding: 8px 16px;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.btn-download:hover {
+  background-color: #1b5e20; /* darker green on hover */
+  transform: scale(1.05);
+}
+
+.btn-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Press feedback */
+.status-btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* Disabled/in-flight (uses your isToggling guard) */
+.status-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Optional: table row visual cue when paid */
+.report-table tr.paid td {
+  background: #fbfdfc; /* very light green tint */
 }
 
 /* Keep form alignment tidy */

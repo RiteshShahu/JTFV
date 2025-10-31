@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electron', {
     try { return await ipcRenderer.invoke('print:list'); }
     catch { return []; }
   },
+  savePdfA4: (dataUrl, opts) => ipcRenderer.invoke('save-pdf-a4', dataUrl, opts),
   printCanonA4: async (dataUrl, opts = {}) => {
     try { return await ipcRenderer.invoke('print:canon-a4', { url: dataUrl, ...opts }); }
     catch (e) { return { ok: false, error: String(e?.message || e) }; }

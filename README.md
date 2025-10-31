@@ -11,3 +11,4 @@ ALTER TABLE bills ADD COLUMN paidAt TEXT;                       -- ISO string or
 
 
 npm i xlsx-js-style
+npm i jspdf html2canvas

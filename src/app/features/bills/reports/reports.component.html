@@ -48,7 +48,7 @@
           <th>Total</th>
           <th>Final Amount</th>
           <th>Status</th>
-          <th>Mark Paid</th>
+          <th>Download</th>
           <th>Edit</th>
           <th>Delete</th>
         </tr>
@@ -62,23 +62,26 @@
           <td>{{ bill.totalAmount | currency:'INR' }}</td>
           <td>{{ bill.finalAmount | currency:'INR' }}</td>
 
-          <!-- Status badge -->
-          <td>
-            <span class="badge" [attr.data-kind]="bill.isPaid ? 'paid' : 'unpaid'">
-              {{ bill.isPaid ? ('Paid' + (bill.paidAt ? ' (' + (bill.paidAt | date:'dd-MMM-yy') + ')' : '')) : 'Unpaid' }}
-            </span>
-          </td>
-
-          <!-- Toggle button (styled like your Edit/Delete) -->
+          <!-- Status badge is now the toggle -->
           <td>
             <button
               type="button"
-              class="btn-toggle"
-              [ngClass]="bill.isPaid ? 'btn-unpaid' : 'btn-paid'"
+              class="status-btn"
+              [attr.data-kind]="bill.isPaid ? 'paid' : 'unpaid'"
               [disabled]="isToggling.has(bill.billNumber)"
               (click)="togglePaid(bill)"
+              [attr.aria-pressed]="bill.isPaid"
             >
-              {{ bill.isPaid ? 'Mark Unpaid' : 'Mark Paid' }}
+              <ng-container *ngIf="bill.isPaid; else unpaidLbl">
+                ✓ Paid <span *ngIf="bill.paidAt">({{ bill.paidAt | date:'dd-MMM-yy' }})</span>
+              </ng-container>
+              <ng-template #unpaidLbl>Unpaid</ng-template>
+            </button>
+          </td>
+
+          <td>
+            <button  type="button" class="btn-download" (click)="downloadPdf(bill)" [disabled]="downloading.has(bill.billNumber)" >
+              {{ downloading.has(bill.billNumber) ? 'Preparing…' : 'Download' }}
             </button>
           </td>
 

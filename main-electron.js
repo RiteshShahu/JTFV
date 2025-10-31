@@ -129,6 +129,10 @@ function gentleRefocus() {
   }, 150);
 }
 
+function sanitizeFilename(name) {
+  return String(name || 'Invoice.pdf').replace(/[\\/:*?"<>|]/g, '_').trim();
+}
+
 ipcMain.handle('ui:refocus-hard', () => { gentleRefocus(); });
 
 /* ======================
@@ -262,8 +266,40 @@ async function printHtmlViaPdfSpool({ html, printerName, pageSize, landscape = f
 }
 
 /* ======================
-   IPC HANDLERS (PDF → SPOOL)
+   IPC HANDLERS (PDF SAVE + PRINT)
    ====================== */
+
+// NEW: Save a real A4 PDF to Documents (used by Reports → Download)
+ipcMain.handle('save-pdf-a4', async (_event, dataUrl, opts) => {
+  log(`IPC save-pdf-a4 URL len=${(dataUrl||'').length}`);
+  const win = createPrintWindow();
+  try {
+    const html = htmlFromDataUrl(dataUrl);
+    await loadHtmlIntoWindow(win, html);
+
+    const pdfBuffer = await win.webContents.printToPDF({
+      printBackground: true,
+      landscape: !!opts?.landscape,
+      marginsType: 0,           // use custom margins (if you add later)
+      pageSize: 'A4'
+    });
+
+    // ✅ CHANGED: Documents -> Desktop
+    const defaultName = sanitizeFilename(opts?.filename || `Invoice_${Date.now()}.pdf`);
+    const savePath = path.join(app.getPath('desktop'), defaultName);
+
+    fs.writeFileSync(savePath, pdfBuffer);
+
+    log(`✅ PDF saved to Desktop: ${savePath}`);
+    return { ok: true, path: savePath };
+  } catch (err) {
+    log(`❌ save-pdf-a4 error: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  } finally {
+    try { if (!win.isDestroyed()) win.close(); } catch {}
+    gentleRefocus();
+  }
+});
 
 ipcMain.handle('print:list', async () => {
   const win = createPrintWindow();

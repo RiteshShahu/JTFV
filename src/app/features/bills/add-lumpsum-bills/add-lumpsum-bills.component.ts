@@ -425,6 +425,139 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     target.style.height = target.scrollHeight + 'px';
   };
 
+  /** Static HTML builder for Reports → Download PDF (Lumpsum bills) */
+  /** Static HTML builder for Reports → Download PDF (Lumpsum bills)
+   *  Style and layout are IDENTICAL to buildPrintHtml()
+   */
+  static buildLumpsumHtml(payload: {
+    billNumber: string;
+    billDate: string;
+    clientName?: string;
+    address?: string;
+    description?: string;
+    amount?: number;
+    discount?: number;    // percent
+    finalAmount?: number; // optional; will be derived if missing
+  }): string {
+    const esc = (s: string) =>
+      (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const fmt = (n: number) =>
+      new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        .format(isFinite(n as number) ? Number(n) : 0);
+
+    const dateStr = (() => {
+      const d = new Date(payload.billDate);
+      return Number.isNaN(d.getTime()) ? (payload.billDate || '') : d.toLocaleDateString('en-GB');
+    })();
+
+    const totalAmount = Number(payload.amount || 0);
+    const discountPct = Number(payload.discount || 0);
+    const discountValue = (totalAmount * discountPct) / 100;
+    const grandTotal =
+      typeof payload.finalAmount === 'number' && isFinite(payload.finalAmount)
+        ? Number(payload.finalAmount)
+        : totalAmount - discountValue;
+
+    const styles = `
+      <style>
+        @page { size: A4; margin: 10mm; }
+        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { margin: 0; }
+        .page {
+          max-width: 950px;
+          margin: 0 auto;
+          padding: 40px;
+          font-family: 'Poppins','Segoe UI',Tahoma,sans-serif;
+          background: #ffffff;
+          color: #2c3e50;
+          page-break-after: auto; /* single page, same as buildPrintHtml */
+        }
+        .top-section { text-align: center; margin-bottom: 12px; }
+        .title { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 6px; }
+        .address-line,.license-line,.email-line { font-size: 13px; color: #546e7a; margin: 2px 0; }
+        .invoice-title { text-align: center; font-size: 18px; font-weight: 700; letter-spacing: .3px; margin: 14px 0 10px; }
+
+        .info-grid {
+          display: grid;
+          grid-template-columns: 1.2fr 0.8fr;
+          align-items: start;
+          gap: 16px 24px;
+          margin-bottom: 16px;
+          font-size: 14px;
+        }
+        .left-info .line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
+        .gst-no {
+          font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
+          font-size: 16px; letter-spacing: 1px;
+        }
+        .left-info label { font-weight: 700; white-space: nowrap; }
+
+        .right-meta .meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .right-meta label { font-weight: 700; white-space: nowrap; min-width: 80px; text-align: right; }
+
+        .description-container { text-align: center; margin: 16px 0 22px; }
+        .description-print {
+          display: inline-block; margin: 0 auto; padding: 8px 14px; border: 1px solid #d8d8d8;
+          border-radius: 6px; background: #f5f5f5; font-size: 14px; font-weight: 600; line-height: 1.45;
+          max-width: 85%; white-space: pre-line; word-break: break-word; text-align: center; color: #2c3e50;
+        }
+
+        .print-summary-footer { margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px; font-size: 15px; }
+        .summary { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 10px; }
+        .summary label { font-weight: 600; min-width: 150px; text-align: right; }
+        .discount-line { display: inline-flex; gap: 10px; align-items: baseline; }
+        .highlight-value { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #2c3e50; }
+
+        .print-toggle input, .print-toggle textarea, .print-toggle select { display: none !important; }
+        .print-toggle .print-view { display: inline !important; }
+      </style>`;
+
+    const onePage = `
+      <div class="page">
+        <div class="top-section">
+          <h2 class="title">J.T. Fruits &amp; Vegetables</h2>
+          <div class="address-line">Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</div>
+          <div class="license-line">PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</div>
+          <div class="email-line">Email: jkumarshahu5@gmail.com</div>
+        </div>
+
+        <h3 class="invoice-title">TAX FREE INVOICE</h3>
+
+        <div class="info-grid">
+          <div class="left-info">
+            <div class="line"><label>NAME :</label><span>${esc(payload.clientName || '')}</span></div>
+            <div class="line"><label>ADDRESS :</label><span style="white-space: pre-line;">${esc(payload.address || '')}</span></div>
+            <div class="line"><label>GST No :</label><span class="gst-no">27AACCA8432H1ZQ</span></div>
+          </div>
+
+          <div class="right-meta">
+            <div class="meta"><label>BILL NO :</label><span>${esc(payload.billNumber)}</span></div>
+            <div class="meta"><label>DATE :</label><span>${esc(dateStr)}</span></div>
+            <div class="meta"><label>AMOUNT :</label><span>${fmt(totalAmount)}</span></div>
+          </div>
+        </div>
+
+        <div class="description-container">
+          <div class="description-print">${esc(payload.description || '')}</div>
+        </div>
+
+        <div class="print-summary-footer">
+          <div class="summary"><label>Total Amount :</label><div>${fmt(totalAmount)}</div></div>
+          <div class="summary">
+            <label>Discount :</label>
+            <div class="discount-line"><span class="highlight-value">${fmt(discountPct)} %</span><span>${fmt(discountValue)}</span></div>
+          </div>
+          <div class="summary"><label>Grand Total :</label><div>${fmt(grandTotal)}</div></div>
+          <div style="text-align:right; margin-top:50px; font-weight:600;">J.T. Fruits &amp; Vegetables</div>
+        </div>
+      </div>`;
+
+    return `<!doctype html><html><head><meta charset="utf-8"/>
+      <title>Lumpsum Invoice ${esc(payload.billNumber)}</title>${styles}
+    </head><body>${onePage}</body></html>`;
+  }
+
   private htmlToDataUrl(html: string): string {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }
