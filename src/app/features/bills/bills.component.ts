@@ -53,7 +53,7 @@ export class BillsComponent implements OnInit {
     private route: ActivatedRoute,
     private http: HttpClient,
     private toast: ToastService   // ⬅️ toast
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.titleService.setTitle('Invoice - J.T. Fruits & Vegetables');
@@ -335,11 +335,11 @@ export class BillsComponent implements OnInit {
       this.isPrinting = false;
 
       setTimeout(() => {
-        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
-        try { window.focus(); } catch {}
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { }
+        try { window.focus(); } catch { }
       }, 40);
 
-      try { (window as any).electron?.refocusHard?.(); } catch {}
+      try { (window as any).electron?.refocusHard?.(); } catch { }
     }
   }
 
@@ -382,7 +382,7 @@ export class BillsComponent implements OnInit {
         <body>${pages}</body>
       </html>`;
   }
-    
+
   private formatDateDDMMYYYY(iso: string): string {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso || '';

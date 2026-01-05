@@ -8,12 +8,14 @@
   <div class="barcode-top-options no-print">
     <div class="packed-date-wrapper">
       <label for="packedOn" class="packed-date-label">📦 <strong>Packed On Date</strong></label>
-      <input type="date" id="packedOn" name="packedOn" class="form-control packed-date-input" [(ngModel)]="packedOnDate" (change)="onPackedOnChange()" />
+      <input type="date" id="packedOn" name="packedOn" class="form-control packed-date-input" [(ngModel)]="packedOnDate"
+        (change)="onPackedOnChange()" />
     </div>
 
     <div class="print-style-wrapper">
       <label class="print-style-label">🖨️ Select Print Style:</label>
-      <select class="form-select print-style-select" [(ngModel)]="selectedPrintStyle" name="printStyle" (change)="onPrintStyleChange(selectedPrintStyle)">
+      <select class="form-select print-style-select" [(ngModel)]="selectedPrintStyle" name="printStyle"
+        (change)="onPrintStyleChange(selectedPrintStyle)">
         <option value="reliance">Reliance</option>
         <option value="dmart">D-Mart</option>
         <option value="old-dmart">Old-DMart</option>
@@ -37,7 +39,8 @@
       <tbody>
         <tr *ngFor="let item of products; let i = index; trackBy: trackByIndex">
           <td>
-            <select class="form-control" name="productName{{i}}" [(ngModel)]="item.nameId" (ngModelChange)="onProductIdChange(i, $event)" >
+            <select class="form-control" name="productName{{i}}" [(ngModel)]="item.nameId"
+              (ngModelChange)="onProductIdChange(i, $event)">
               <option [ngValue]="null">Select Product</option>
               <option *ngFor="let option of filteredNameOptions" [ngValue]="option.id">
                 {{ option.name }} {{ option.units }}
@@ -48,14 +51,16 @@
             <input type="number" class="form-control" [(ngModel)]="item.quantity" name="quantity{{i}}" />
           </td>
           <td>
-            <input type="number" class="form-control" [(ngModel)]="item.mrp" name="mrp{{i}}" (change)="onMrpChange(i)" (keydown)="onMrpKeyDown($event, i)" />
+            <input type="number" class="form-control" [(ngModel)]="item.mrp" name="mrp{{i}}" (change)="onMrpChange(i)"
+              (keydown)="onMrpKeyDown($event, i)" />
           </td>
           <!-- <td>
             <input type="number" class="form-control" [(ngModel)]="item.expiryDays" name="expiryDays{{i}}" (change)="updateExpiry(i)"
             (keydown)="onQtyKeyDown($event, i)"/>
           </td> -->
           <td>
-            <select class="form-control" [(ngModel)]="item.category" name="category{{i}}" (change)="generateBarcode(item)" [tabindex]="-1" >
+            <select class="form-control" [(ngModel)]="item.category" name="category{{i}}"
+              (change)="generateBarcode(item)" [tabindex]="-1">
               <option value="">Select</option>
               <option value="Fruit">Fruit</option>
               <option value="Vegetable">Vegetable</option>
@@ -65,7 +70,8 @@
             <input type="date" class="form-control" [(ngModel)]="item.expiryDate" name="expiryDate{{i}}" [tabindex]="-1" />
           </td> -->
           <td class="no-print">
-            <button type="button" class="btn btn-outline-danger delete-btn" (click)="removeRow(i)" [tabindex]="-1" >Delete</button>
+            <button type="button" class="btn btn-outline-danger delete-btn" (click)="removeRow(i)"
+              [tabindex]="-1">Delete</button>
           </td>
         </tr>
       </tbody>
@@ -75,6 +81,11 @@
       <button type="button" class="btn btn-outline-primary add-btn" (click)="addRow()">Add Row</button>
       <button type="button" class="btn btn-warning" (click)="resetForm()">Refresh</button>
       <button type="button" class="btn btn-primary" (click)="printSelected()">Print</button>
+
+      <!-- <button type="button" (click)="testPreview()">
+        Test Preview (No Print)
+      </button> -->
+
       <button type="button" class="btn btn-success view-history-btn" (click)="goToHistory()">View History</button>
     </div>
   </form>

@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 const nodemailer = require('nodemailer');
 const path = require('path');
 const fs = require('fs');
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 
 dotenv.config();
 
@@ -82,7 +82,7 @@ const db = new sqlite3.Database(dbPath, (err) => {
     )
     `);
 
-db.run(`
+  db.run(`
   CREATE TABLE IF NOT EXISTS names (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     barcode TEXT,
@@ -245,11 +245,26 @@ app.post('/api/names', (req, res) => {
     INSERT INTO names (barcode, name, type, priority, units, mrp, expiryDays) 
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
-  db.run(query, [barcode || '', name.trim(), type || null, priority || '', units || '', mrp || null, expiryDays || null], function (err) {
-    if (err) return res.status(500).json({ message: 'Failed to add name', error: err.message });
-    res.status(201).json({ message: 'Name added', id: this.lastID });
-  });
+
+  const bc = (barcode && String(barcode).trim()) ? String(barcode).trim() : null;
+
+  db.run(
+    query,
+    [bc, name.trim(), type || null, priority || '', units || '', mrp || null, expiryDays || null],
+    function (err) {
+      if (err) {
+        console.error('❌ Failed to add name:', err.message);
+        return res.status(500).json({
+          message: 'Failed to add name',
+          details: err.message,
+          code: err.code,
+        });
+      }
+      res.status(201).json({ message: 'Name added', id: this.lastID });
+    }
+  );
 });
+
 
 // Get a single name by ID
 app.get('/api/names/:id', (req, res) => {
@@ -849,8 +864,8 @@ function normalizeStyle(s) {
 }
 
 app.get('/api/label-prints/product-totals', (req, res) => {
-  const from  = (req.query.from  || '').toString();
-  const to    = (req.query.to    || '').toString();
+  const from = (req.query.from || '').toString();
+  const to = (req.query.to || '').toString();
   const field = req.query.field === 'createdAt' ? 'createdAt' : 'packedOnDate';
   const nameId = req.query.nameId ? Number(req.query.nameId) : null;
   const productName = (req.query.productName || '').toString();
@@ -916,7 +931,7 @@ app.get('/api/label-prints/product-totals', (req, res) => {
     }
 
     const totalLabels = Number(row?.totalLabels || 0);
-    const totalMrp    = Number(row?.totalMrp || 0);
+    const totalMrp = Number(row?.totalMrp || 0);
 
     res.json({
       from, to, field,
@@ -954,15 +969,72 @@ app.post('/api/login', (req, res) => {
   });
 });
 
+// ==================== EMAIL SENDING WITH PDF ATTACHMENT ====================
+function createMailTransporter() {
+  if (process.env.SMTP_HOST) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === '1' || process.env.SMTP_SECURE === 'true',
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  }
+
+  // Gmail fallback (App Password)
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.MAIL_USER || 'jkumarshahu5@gmail.com',
+      pass: process.env.MAIL_PASS || 'vobd eiax vdrd yvbh',
+    },
+  });
+}
+
+// ✅ create once, reuse everywhere
+const mailer = createMailTransporter();
+
+// ---- helper: normalize recipients / cc / bcc ----
+function normalizeList(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    return val
+      .split(/[,\s]+/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function isValidEmail(addr) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
+}
+
+function resolveWindowsBrowserPath() {
+  const candidates = [
+    // Edge
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    // Chrome
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
 // ==================== EMAIL BILL ROUTE (PDF attachment) ====================
 app.post('/api/send-bill', async (req, res) => {
   const bill = req.body || {};
   const {
-    // New, preferred:
     to,
-    // Legacy:
     email,
-    // Optional
     cc,
     bcc,
     pdfHtml,
@@ -976,28 +1048,18 @@ app.post('/api/send-bill', async (req, res) => {
     finalAmount,
   } = bill;
 
-  // ---- normalize recipients ----
-  const normalizeList = (val) => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string') {
-      return val.split(/[,\s]+/).map(s => s.trim()).filter(Boolean);
-    }
-    return [];
-  };
-
   const recipients = [
     ...normalizeList(to),
-    ...normalizeList(email)   // support old 'email' field too
+    ...normalizeList(email),
   ];
 
-  // de-dupe, basic validation
   const seen = new Set();
   const validRecipients = recipients.filter(addr => {
-    const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
+    const ok = isValidEmail(addr);
     if (!ok) return false;
-    if (seen.has(addr.toLowerCase())) return false;
-    seen.add(addr.toLowerCase());
+    const key = addr.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 
@@ -1008,13 +1070,28 @@ app.post('/api/send-bill', async (req, res) => {
     return res.status(400).json({ message: 'Missing pdfHtml' });
   }
 
-  // Use your existing transporter (or the createMailTransporter() you already wrote)
-  const transporter = createMailTransporter();
+  const ccList = normalizeList(cc).filter(isValidEmail);
+  const bccList = normalizeList(bcc).filter(isValidEmail);
+
+  const transporter = mailer;
 
   let browser;
   try {
-    // HTML → PDF (unchanged)
-    browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const executablePath =
+      process.env.PUPPETEER_EXECUTABLE_PATH || resolveWindowsBrowserPath();
+
+    if (!executablePath) {
+      return res.status(500).json({
+        message: 'No Chrome/Edge found for PDF generation. Please install Microsoft Edge or Google Chrome.',
+      });
+    }
+
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
     await page.setContent(pdfHtml, { waitUntil: 'networkidle0' });
@@ -1026,20 +1103,22 @@ app.post('/api/send-bill', async (req, res) => {
     });
 
     const textSummary =
-`Dear ${clientName || 'Customer'},
+      `Dear ${clientName || 'Customer'},
 
 Please find attached invoice${billNumber ? ` (${billNumber})` : ''}${billDate ? ` dated ${billDate}` : ''}.
 
-${typeof totalAmount === 'number' ? `Total: ₹${Number(totalAmount).toLocaleString('en-IN')}\n` : ''}${typeof discount === 'number' ? `Margin: ${discount}%\n` : ''}${typeof finalAmount === 'number' ? `Final: ₹${Number(finalAmount).toLocaleString('en-IN')}\n` : ''}
+${typeof totalAmount === 'number' ? `Total: ₹${Number(totalAmount).toLocaleString('en-IN')}\n` : ''}` +
+      `${typeof discount === 'number' ? `Margin: ${discount}%\n` : ''}` +
+      `${typeof finalAmount === 'number' ? `Final: ₹${Number(finalAmount).toLocaleString('en-IN')}\n` : ''}
 
 Regards,
 J.T. Fruits & Vegetables`;
 
     await transporter.sendMail({
       from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
-      to: validRecipients.join(','),   // multiple recipients
-      cc,                              // optional (string or comma-separated)
-      bcc,                             // optional
+      to: validRecipients.join(','),
+      cc: ccList.length ? ccList.join(',') : undefined,
+      bcc: bccList.length ? bccList.join(',') : undefined,
       subject,
       text: textSummary,
       attachments: [
@@ -1050,36 +1129,15 @@ J.T. Fruits & Vegetables`;
     return res.status(200).json({ message: 'Email sent successfully with PDF attachment' });
   } catch (error) {
     console.error('Email sending failed:', error);
-    return res.status(500).json({ message: 'Failed to send email' });
+    return res.status(500).json({
+      message: 'Failed to send email',
+      details: (error && error.message) ? error.message : String(error),
+    });
   } finally {
-    if (browser) { try { await browser.close(); } catch {} }
+    if (browser) { try { await browser.close(); } catch { } }
   }
 });
 
-// ---- mail transporter (reuse everywhere) ----
-function createMailTransporter() {
-  // Prefer explicit SMTP if you have it; keep Gmail fallback
-  if (process.env.SMTP_HOST) {
-    return nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: !!process.env.SMTP_SECURE, // '1' to force true
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-  }
-  // Gmail (needs App Password)
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.MAIL_USER || 'jkumarshahu5@gmail.com',
-      pass: process.env.MAIL_PASS || 'vobd eiax vdrd yvbh',
-    },
-  });
-}
-const mailer = createMailTransporter();
 
 // ==================== EMAIL: PRICE CHANGE (XLSX attachment) ====================
 app.post('/email/price-change', async (req, res) => {
@@ -1116,7 +1174,10 @@ app.post('/email/price-change', async (req, res) => {
     res.json({ ok: true });
   } catch (err) {
     console.error('Email /email/price-change failed:', err);
-    res.status(500).json({ message: 'Failed to send email' });
+    return res.status(500).json({
+      message: 'Failed to send email',
+      details: error?.message || String(error),
+    });
   }
 });
 

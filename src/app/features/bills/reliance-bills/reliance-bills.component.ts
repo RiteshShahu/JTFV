@@ -24,14 +24,14 @@ type NameWithPrice = Name & { mrp?: number; price?: number; units?: string; name
 })
 export class RelianceBillsComponent implements OnInit {
   @ViewChildren('productSelect') productSelectInputs!: QueryList<ElementRef>;
-  @ViewChildren('priceInput')   priceInputs!: QueryList<ElementRef>;
+  @ViewChildren('priceInput') priceInputs!: QueryList<ElementRef>;
   @ViewChildren('addressTextarea') addressTextareas!: QueryList<ElementRef>;
 
   products: NameWithPrice[] = [];
-  namesMap:  { [id: number]: string } = {};
+  namesMap: { [id: number]: string } = {};
   /** name + units map for consistent display everywhere */
   namesWithUnitsMap: { [id: number]: string } = {};
-  priceMap:  { [id: number]: number } = {};  // id → MRP/price
+  priceMap: { [id: number]: number } = {};  // id → MRP/price
 
   billItems: BillItem[] = [];
   clients: any[] = [];
@@ -67,7 +67,7 @@ export class RelianceBillsComponent implements OnInit {
   private readonly RELIANCE_ADDR =
     'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
 
-    /** ---------- STATIC HTML BUILDER FOR REUSE (Reports → Download) ---------- */
+  /** ---------- STATIC HTML BUILDER FOR REUSE (Reports → Download) ---------- */
   private static readonly NET_FACTOR = 0.85;
   private static readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
   private static readonly RELIANCE_ADDR =
@@ -80,7 +80,7 @@ export class RelianceBillsComponent implements OnInit {
     private route: ActivatedRoute,
     private toast: ToastService,
     private http: HttpClient
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.titleService.setTitle('Invoice - J.T. Fruits & Vegetables');
@@ -106,7 +106,7 @@ export class RelianceBillsComponent implements OnInit {
         if ((this.billsService as any).getLatestBillNumber) {
           (this.billsService as any).getLatestBillNumber().subscribe({
             next: (res: { billNumber: string }) => (this.billNumber = res.billNumber),
-            error: () => {}
+            error: () => { }
           });
         }
       }
@@ -115,7 +115,7 @@ export class RelianceBillsComponent implements OnInit {
     // Load clients
     this.http.get<any[]>('http://localhost:3001/api/clients').subscribe({
       next: (data) => (this.clients = data),
-      error: () => {}
+      error: () => { }
     });
   }
 
@@ -128,10 +128,10 @@ export class RelianceBillsComponent implements OnInit {
   loadBillForEdit(billNumber: string): void {
     this.http.get<any>(`http://localhost:3001/api/bills/${billNumber}`).subscribe({
       next: bill => {
-        this.clientName  = bill.clientName || this.clientName;
-        this.address     = bill.address    || this.address;
-        this.billNumber  = bill.billNumber || billNumber;
-        this.billDate    = bill.billDate   || this.billDate;
+        this.clientName = bill.clientName || this.clientName;
+        this.address = bill.address || this.address;
+        this.billNumber = bill.billNumber || billNumber;
+        this.billDate = bill.billDate || this.billDate;
         this.totalAmount = Number(bill.totalAmount ?? 0);
 
         let items: any[] = [];
@@ -286,18 +286,18 @@ export class RelianceBillsComponent implements OnInit {
       }
     });
 
-    this.totalQuantity  = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+    this.totalQuantity = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
     this.totalItemPrice = +items.reduce((acc, it) => acc + (it.price || 0), 0).toFixed(2); // sum of mrps
-    this.totalAmount    = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2); // sum of NET
+    this.totalAmount = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2); // sum of NET
 
-    this.balanceAmount  = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
+    this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
   }
 
   amountInWords(num: number): string {
-    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-              'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen',
-              'Eighteen','Nineteen'];
-    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
+      'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
     const numToWords = (n: number): string => {
       if (n < 20) return a[n];
@@ -320,9 +320,9 @@ export class RelianceBillsComponent implements OnInit {
   }
 
   private static amountInWords(num: number): string {
-    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-      'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
     const numToWords = (n: number): string => {
       if (n < 20) return a[n];
       if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
@@ -488,15 +488,15 @@ export class RelianceBillsComponent implements OnInit {
   /** Build print/email HTML (single copy) — uses shared CSS + BODY */
   private buildPrintHtml(validItems: BillItem[]): string {
     const styles = this.getInvoiceStyles();
-    const body   = this.buildInvoiceBody(validItems);
+    const body = this.buildInvoiceBody(validItems);
     return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>${body}</body></html>`;
   }
 
   /** Build multi-copy HTML by repeating the same BODY with page breaks — styles kept */
   private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
     const styles = this.getInvoiceStyles();
-    const body   = this.buildInvoiceBody(validItems);
-    const pages  = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
+    const body = this.buildInvoiceBody(validItems);
+    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
 
     return `
       <!doctype html>
@@ -514,7 +514,7 @@ export class RelianceBillsComponent implements OnInit {
     try {
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
-    } catch {}
+    } catch { }
 
     this.isPrinting = true;
 
@@ -548,7 +548,7 @@ export class RelianceBillsComponent implements OnInit {
 
       // Totals for footer
       this.totalQuantity = validItems.reduce((a, it) => a + (it.quantity || 0), 0);
-      this.totalAmount   = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+      this.totalAmount = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
       this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
 
       // Clamp copies (1..50)
@@ -582,12 +582,12 @@ export class RelianceBillsComponent implements OnInit {
 
       // Gentle refocus to avoid input/keyboard freeze after driver dialog
       setTimeout(() => {
-        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
-        try { window.focus(); } catch {}
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { }
+        try { window.focus(); } catch { }
       }, 40);
 
       // Ask main process for a single soft nudge (no minimize/restore loops)
-      try { await (window as any).electron?.refocusHard?.(); } catch {}
+      try { await (window as any).electron?.refocusHard?.(); } catch { }
     }
   }
 
@@ -611,8 +611,8 @@ export class RelianceBillsComponent implements OnInit {
     // 1) Basic items validation (same as before)
     const validItems = this.billItems.filter(
       it => it.productId !== null &&
-            (it.productName || this.namesWithUnitsMap[it.productId!]) &&
-            it.quantity > 0
+        (it.productName || this.namesWithUnitsMap[it.productId!]) &&
+        it.quantity > 0
     );
     if (!validItems.length) {
       this.toast.warn('Please enter at least one valid item.');
@@ -650,7 +650,7 @@ export class RelianceBillsComponent implements OnInit {
     });
 
     this.totalQuantity = normalized.reduce((a, it) => a + (it.quantity || 0), 0);
-    this.totalAmount   = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+    this.totalAmount = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
 
     // 5) Build PDF HTML with the SAME CSS + BODY as print
     const pdfHtml = this.buildPrintHtml(normalized);
@@ -669,10 +669,21 @@ export class RelianceBillsComponent implements OnInit {
     };
 
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => this.toast.success('Email Sent!'),
+      next: () => this.toast.success('Email sent successfully'),
       error: (err) => {
         console.error('Email failed:', err);
-        this.toast.error('Failed to send email. Please try again.');
+
+        let message =
+          err?.error?.details ||
+          err?.error?.message ||
+          err?.message ||
+          'Failed to send email';
+
+        if (message.includes('Chrome') || message.includes('Edge')) {
+          message = 'PDF engine not found. Please install Google Chrome or Microsoft Edge.';
+        }
+        this.toast.error(message);
+
       }
     });
   }

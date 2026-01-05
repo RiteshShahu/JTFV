@@ -24,14 +24,14 @@ type NameWithPrice = Name & { mrp?: number; price?: number; units?: string; name
 })
 export class EditRelianceBillsComponent implements OnInit {
   @ViewChildren('productSelect') productSelectInputs!: QueryList<ElementRef>;
-  @ViewChildren('priceInput')   priceInputs!: QueryList<ElementRef>;
+  @ViewChildren('priceInput') priceInputs!: QueryList<ElementRef>;
   @ViewChildren('addressTextarea') addressTextareas!: QueryList<ElementRef>;
 
   products: NameWithPrice[] = [];
-  namesMap:  { [id: number]: string } = {};
+  namesMap: { [id: number]: string } = {};
   /** name + units map for consistent display */
   namesWithUnitsMap: { [id: number]: string } = {};
-  priceMap:  { [id: number]: number } = {};
+  priceMap: { [id: number]: number } = {};
 
   billItems: BillItem[] = [];
   clients: any[] = [];
@@ -77,7 +77,7 @@ export class EditRelianceBillsComponent implements OnInit {
     private route: ActivatedRoute,
     private http: HttpClient,
     private toast: ToastService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.titleService.setTitle('Edit Invoice - J.T. Fruits & Vegetables');
@@ -106,7 +106,7 @@ export class EditRelianceBillsComponent implements OnInit {
     // (Optional) load clients
     this.http.get<any[]>('http://localhost:3001/api/clients').subscribe({
       next: (data) => (this.clients = data),
-      error: () => {}
+      error: () => { }
     });
   }
 
@@ -119,11 +119,11 @@ export class EditRelianceBillsComponent implements OnInit {
   loadBillForEdit(billNumber: string): void {
     this.http.get<any>(`http://localhost:3001/api/bills/${billNumber}`).subscribe({
       next: bill => {
-        this.clientName  = bill.clientName || this.clientName;
-        this.address     = bill.address    || this.address;
-        this.billNumber  = bill.billNumber || billNumber;
+        this.clientName = bill.clientName || this.clientName;
+        this.address = bill.address || this.address;
+        this.billNumber = bill.billNumber || billNumber;
         this.originalBillNumber = this.normalizeBillNumber(this.billNumber);
-        this.billDate    = bill.billDate   || this.billDate;
+        this.billDate = bill.billDate || this.billDate;
         this.totalAmount = Number(bill.totalAmount ?? 0);
 
         let items: any[] = [];
@@ -279,11 +279,11 @@ export class EditRelianceBillsComponent implements OnInit {
       }
     });
 
-    this.totalQuantity  = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+    this.totalQuantity = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
     this.totalItemPrice = +items.reduce((acc, it) => acc + (it.price || 0), 0).toFixed(2);
-    this.totalAmount    = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2);
+    this.totalAmount = +items.reduce((acc, it) => acc + (it.total || 0), 0).toFixed(2);
 
-    this.balanceAmount  = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
+    this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
   }
 
   private fmt(n: number): string {
@@ -438,15 +438,15 @@ export class EditRelianceBillsComponent implements OnInit {
   /** Build A4 HTML (single copy) — used for both email PDF and as base for print */
   private buildPrintHtml(validItems: BillItem[]): string {
     const styles = this.getInvoiceStyles();
-    const body   = this.buildInvoiceBody(validItems);
+    const body = this.buildInvoiceBody(validItems);
     return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>${body}</body></html>`;
   }
 
   /** Build multi-copy HTML — repeats same BODY with styles intact */
   private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
     const styles = this.getInvoiceStyles();
-    const body   = this.buildInvoiceBody(validItems);
-    const pages  = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
+    const body = this.buildInvoiceBody(validItems);
+    const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
 
     return `
       <!doctype html>
@@ -463,7 +463,7 @@ export class EditRelianceBillsComponent implements OnInit {
     try {
       const active = document.activeElement as HTMLElement | null;
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
-    } catch {}
+    } catch { }
 
     this.isPrinting = true;
 
@@ -497,7 +497,7 @@ export class EditRelianceBillsComponent implements OnInit {
 
       // Totals for footer
       this.totalQuantity = validItems.reduce((a, it) => a + (it.quantity || 0), 0);
-      this.totalAmount   = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+      this.totalAmount = +validItems.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
       this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
 
       // Clamp copies (1..50)
@@ -505,8 +505,8 @@ export class EditRelianceBillsComponent implements OnInit {
 
       // Build multi-copy HTML (N pages in one job)
       const html = typeof (this as any).buildPrintHtmlMulti === 'function'
-      ? this.buildPrintHtmlMulti(validItems, copies)
-      : this.buildPrintHtml(validItems);
+        ? this.buildPrintHtmlMulti(validItems, copies)
+        : this.buildPrintHtml(validItems);
 
 
       const dataUrl = this.htmlToDataUrl(html);
@@ -534,11 +534,11 @@ export class EditRelianceBillsComponent implements OnInit {
 
       // Gentle refocus after driver dialog
       setTimeout(() => {
-        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
-        try { window.focus(); } catch {}
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { }
+        try { window.focus(); } catch { }
       }, 40);
 
-      try { await (window as any).electron?.refocusHard?.(); } catch {}
+      try { await (window as any).electron?.refocusHard?.(); } catch { }
     }
   }
 
@@ -560,8 +560,8 @@ export class EditRelianceBillsComponent implements OnInit {
 
     const validItems = this.billItems.filter(
       it => it.productId !== null &&
-            (it.productName || this.namesWithUnitsMap[it.productId!]) &&
-            it.quantity > 0
+        (it.productName || this.namesWithUnitsMap[it.productId!]) &&
+        it.quantity > 0
     );
     if (!validItems.length) {
       this.toast.warn('No valid items to email. Please add at least one valid item.');
@@ -597,7 +597,7 @@ export class EditRelianceBillsComponent implements OnInit {
     });
 
     this.totalQuantity = normalized.reduce((a, it) => a + (it.quantity || 0), 0);
-    this.totalAmount   = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
+    this.totalAmount = +normalized.reduce((a, it) => a + (it.total || 0), 0).toFixed(2);
 
     // SAME HTML/CSS as print
     const pdfHtml = this.buildPrintHtml(normalized);
@@ -615,10 +615,21 @@ export class EditRelianceBillsComponent implements OnInit {
     };
 
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => this.toast.success('Email Sent!'),
+      next: () => this.toast.success('Email sent successfully'),
       error: (err) => {
         console.error('Email failed:', err);
-        this.toast.error('Failed to send email. Please try again.');
+
+        let message =
+          err?.error?.details ||
+          err?.error?.message ||
+          err?.message ||
+          'Failed to send email';
+
+        if (message.includes('Chrome') || message.includes('Edge')) {
+          message = 'PDF engine not found. Please install Google Chrome or Microsoft Edge.';
+        }
+        this.toast.error(message);
+
       }
     });
   }
@@ -711,10 +722,10 @@ export class EditRelianceBillsComponent implements OnInit {
   }
 
   amountInWords(num: number): string {
-    const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-              'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen',
-              'Eighteen','Nineteen'];
-    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
+      'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
 
     const numToWords = (n: number): string => {
       if (n < 20) return a[n];
@@ -787,15 +798,15 @@ export class EditRelianceBillsComponent implements OnInit {
   }
 
   private static amountInWords(num: number): string {
-    const a = ['', 'One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-              'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-    const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
     const numToWords = (n: number): string => {
       if (n < 20) return a[n];
-      if (n < 100) return b[Math.floor(n/10)] + (n%10 ? ' ' + a[n%10] : '');
-      if (n < 1000) return a[Math.floor(n/100)] + ' Hundred' + (n%100 ? ' and ' + numToWords(n%100) : '');
-      if (n < 100000) return numToWords(Math.floor(n/1000)) + ' Thousand' + (n%1000 ? ' ' + numToWords(n%1000) : '');
-      if (n < 10000000) return numToWords(Math.floor(n/100000)) + ' Lakh' + (n%100000 ? ' ' + numToWords(n%100000) : '');
+      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
+      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + numToWords(n % 100) : '');
+      if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
+      if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
       return '';
     };
     const rupees = Math.floor(num);
@@ -835,7 +846,7 @@ export class EditRelianceBillsComponent implements OnInit {
   static buildRelianceHtml(payload: {
     billNumber: string; billDate: string;
     clientName?: string; address?: string;
-    billItems: Array<{ productId: number|null; productName: string; quantity: number; price: number; total: number; manualTotal?: boolean }>;
+    billItems: Array<{ productId: number | null; productName: string; quantity: number; price: number; total: number; manualTotal?: boolean }>;
     totalAmount?: number; copies?: number; shipToName?: string; shipToAddress?: string;
   }): string {
     const copies = Math.max(1, Math.min(50, Math.floor(payload.copies ?? 1)));
@@ -857,7 +868,7 @@ export class EditRelianceBillsComponent implements OnInit {
     const totalAmount = +(payload.totalAmount ?? +items.reduce((a, it) => a + (it.total || 0), 0).toFixed(2));
 
     const rows = items.map((it, i) => `
-      <tr><td>${i+1}</td><td>${it.productName}</td><td>${it.quantity}</td>
+      <tr><td>${i + 1}</td><td>${it.productName}</td><td>${it.quantity}</td>
       <td>₹ ${this.inr(it.price)}</td><td>₹ ${this.inr(it.total)}</td></tr>`).join('');
 
     const body = `

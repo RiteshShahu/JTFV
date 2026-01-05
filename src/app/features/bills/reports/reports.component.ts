@@ -26,7 +26,7 @@ export class ReportsComponent implements OnInit {
     private billsService: BillsService,
     private router: Router,
     private toast: ToastService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.billsService.getAllBills().subscribe({
@@ -245,8 +245,8 @@ export class ReportsComponent implements OnInit {
     doc.close();
 
     const finish = () => {
-      try { iframe.contentWindow?.focus(); } catch {}
-      try { iframe.contentWindow?.print(); } catch {}
+      try { iframe.contentWindow?.focus(); } catch { }
+      try { iframe.contentWindow?.print(); } catch { }
       setTimeout(() => document.body.removeChild(iframe), 800);
     };
 
@@ -349,7 +349,7 @@ export class ReportsComponent implements OnInit {
         html = (window as any).EditRelianceBillsComponent
           ? (window as any).EditRelianceBillsComponent.buildRelianceHtml(payload)
           : require('src/app/features/bills/edit-reliance-bills/edit-reliance-bills.component')
-              .EditRelianceBillsComponent.buildRelianceHtml(payload);
+            .EditRelianceBillsComponent.buildRelianceHtml(payload);
       }
 
       // === Lumpsum Bills ===
@@ -364,7 +364,7 @@ export class ReportsComponent implements OnInit {
         html = (window as any).AddLumpsumBillsComponent
           ? (window as any).AddLumpsumBillsComponent.buildLumpsumHtml(payload)
           : require('src/app/features/bills/add-lumpsum-bills/add-lumpsum-bills.component')
-              .AddLumpsumBillsComponent.buildLumpsumHtml(payload);
+            .AddLumpsumBillsComponent.buildLumpsumHtml(payload);
       }
 
       // === Normal / Default Bills ===
@@ -446,9 +446,9 @@ export class ReportsComponent implements OnInit {
       (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const amountInWords = (num: number): string => {
-      const a = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-        'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
-      const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+      const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+        'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+      const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
       const numToWords = (n: number): string => {
         if (n < 20) return a[n];
         if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
