@@ -281,28 +281,27 @@ export class BarcodeComponent implements OnInit {
   }
 
   // 🧪 Testing: open preview in a NEW window (no printing)
-  // testPreview() {
-  //   this.preparePrintItems();
+  testPreview() {
+    this.preparePrintItems();
 
-  //   const previewWin = window.open('', '_blank');
-  //   if (!previewWin) {
-  //     alert('Popup blocked. Please allow popups for this site.');
-  //     return;
-  //   }
+    const previewWin = window.open('', '_blank');
+    if (!previewWin) {
+      alert('Popup blocked. Please allow popups for this site.');
+      return;
+    }
 
-  //   previewWin.document.open();
-  //   previewWin.document.write(this.generatePrintHTML());
-  //   previewWin.document.close();
+    previewWin.document.open();
+    previewWin.document.write(this.generatePrintHTML());
+    previewWin.document.close();
 
-  //   // Wait until the DOM is ready, then render barcodes into the preview window
-  //   previewWin.onload = () => {
-  //     this.renderBarcodesInWindow(previewWin).then(() => {
-  //       previewWin.focus();
-  //       // ✅ NO print() here
-  //     });
-  //   };
-  // }
-
+    // Wait until the DOM is ready, then render barcodes into the preview window
+    previewWin.onload = () => {
+      this.renderBarcodesInWindow(previewWin).then(() => {
+        previewWin.focus();
+        // ✅ NO print() here
+      });
+    };
+  }
 
   private preparePrintItems() {
     this.printItems = [];
