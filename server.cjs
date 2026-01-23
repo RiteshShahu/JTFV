@@ -1142,13 +1142,7 @@ J.T. Fruits & Vegetables`;
 // ==================== EMAIL: PRICE CHANGE (XLSX attachment) ====================
 app.post('/email/price-change', async (req, res) => {
   try {
-    const {
-      to,              // string[] of recipients
-      subject,         // string
-      message,         // plain text body
-      filename,        // e.g. 'New Product Price Change.xlsx'
-      fileBase64       // base64 string (no data: prefix)
-    } = req.body || {};
+    const { to, subject, text, html, filename, fileBase64 } = req.body || {};
 
     if (!Array.isArray(to) || to.length === 0) {
       return res.status(400).json({ message: 'Missing recipients array "to"' });
@@ -1161,7 +1155,8 @@ app.post('/email/price-change', async (req, res) => {
       from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
       to: to.join(','),
       subject: subject || 'Product Price Change',
-      text: message || 'Please see the attached price change sheet.',
+      text: text || 'Please see the attached price change sheet.',
+      html: html || undefined,
       attachments: [
         {
           filename,
@@ -1176,7 +1171,7 @@ app.post('/email/price-change', async (req, res) => {
     console.error('Email /email/price-change failed:', err);
     return res.status(500).json({
       message: 'Failed to send email',
-      details: error?.message || String(error),
+      details: err?.message || String(err),
     });
   }
 });

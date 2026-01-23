@@ -40,7 +40,7 @@ export class PriceChangeComponent implements OnInit {
     private productService: ProductService,
     private priceSvc: PriceChangeService,
     private toast: ToastService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.loadProducts();
@@ -54,7 +54,7 @@ export class PriceChangeComponent implements OnInit {
       oldPrice: undefined,
       newPrice: null,
       units: '',
-      margin: 15, // default 15%
+      margin: 15,
     };
   }
 
@@ -91,7 +91,6 @@ export class PriceChangeComponent implements OnInit {
 
   addRow() {
     this.rows.push(this.emptyRow());
-    // Focus next Product select (new row)
     setTimeout(() => this.productSelectInputs?.last?.nativeElement?.focus(), 0);
   }
 
@@ -104,19 +103,15 @@ export class PriceChangeComponent implements OnInit {
     return this.rows.filter(r => r.productId && r.productName && (r.newPrice ?? 0) > 0);
   }
 
-  // === Tab handler on New Price input (adds row at the end & focuses next Product) ===
   onNewPriceKeydown(event: KeyboardEvent, index: number): void {
-    if (event.key !== 'Tab' || event.shiftKey) return; // forward Tab only
+    if (event.key !== 'Tab' || event.shiftKey) return;
     event.preventDefault();
 
     const lastIndex = this.rows.length - 1;
 
     if (index === lastIndex) {
-      // If we're on the last row, add a new one and focus its Product
       this.addRow();
-      // (addRow already focuses .last productSelect)
     } else {
-      // Move focus to next row's Product
       const selects = this.productSelectInputs.toArray();
       selects[index + 1]?.nativeElement.focus();
     }
@@ -124,15 +119,11 @@ export class PriceChangeComponent implements OnInit {
 
   // ------- XLSX (lazy) & Excel helpers -------
 
-  /**
-   * Lazy-load XLSX: prefer xlsx-js-style (supports styles) and
-   * fall back to xlsx (no styles) if not installed.
-   */
   private async getXLSX(): Promise<any> {
     try {
-      return await import('xlsx-js-style'); // header highlight works
+      return await import('xlsx-js-style');
     } catch {
-      return await import('xlsx'); // no cell styles, but still exports fine
+      return await import('xlsx');
     }
   }
 
@@ -141,7 +132,6 @@ export class PriceChangeComponent implements OnInit {
     try {
       const XLSX = await this.getXLSX();
 
-      // Build rows for Excel WITHOUT "Old Price"
       const rows = this.validRows().map((r, idx) => {
         const marginNum = r.margin ?? 15;
         const cp = r.newPrice ? +(r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
@@ -151,7 +141,7 @@ export class PriceChangeComponent implements OnInit {
           Product: r.productName,
           'Selling Price': r.newPrice ?? '',
           'Cost Price': cp,
-          'Margin %': `${marginNum}%`, // show "15%"
+          'Margin %': `${marginNum}%`,
         };
       });
 
@@ -161,17 +151,15 @@ export class PriceChangeComponent implements OnInit {
           : [{ No: '', Barcode: '', Product: '', 'Selling Price': '', 'Cost Price': '', 'Margin %': '' }]
       );
 
-      // Column widths (Product wider)
       ws['!cols'] = [
-        { wch: 6 },   // No
-        { wch: 14 },  // Barcode
-        { wch: 34 },  // Product
-        { wch: 14 },  // Selling Price
-        { wch: 14 },  // Cost Price
-        { wch: 10 },  // Margin %
+        { wch: 6 },
+        { wch: 14 },
+        { wch: 34 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 10 },
       ];
 
-      // Try to style header row (bold + soft highlight)
       const ref = ws['!ref'];
       if (ref) {
         const range = XLSX.utils.decode_range(ref);
@@ -180,13 +168,12 @@ export class PriceChangeComponent implements OnInit {
           const cell: any = ws[addr] || {};
           cell.s = {
             font: { bold: true },
-            fill: { patternType: 'solid', fgColor: { rgb: 'FFF7D6' } }, // pale yellow highlight
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFF7D6' } },
           };
           ws[addr] = cell;
         }
       }
 
-      // Freeze header row (nice UX in Excel)
       (ws as any)['!freeze'] = { xSplit: 0, ySplit: 1 };
 
       const wb = XLSX.utils.book_new();
@@ -197,7 +184,6 @@ export class PriceChangeComponent implements OnInit {
     }
   }
 
-  /** Native, dependency-free download */
   private triggerDownload(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -224,6 +210,140 @@ export class PriceChangeComponent implements OnInit {
     }
   }
 
+  // ------- Email helpers -------
+
+  /** Escape HTML so product names with &, <, > don't break email */
+  private escapeHtml(s: string): string {
+    return (s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /**
+   * Build EMAIL content in TABLE form like your 2nd image:
+   * PRODUCT | BARCODE | SELLING PRICE | COST PRICE | MARGIN
+   */
+  private buildTableEmail(rows: Row[]) {
+    // Plain-text fallback
+    const text =
+      `${this.message || ''}\n\n` +
+      (rows.length
+        ? rows
+          .map((r, i) => {
+            const m = r.margin ?? 15;
+            const sp = r.newPrice ?? '';
+            const cp = r.newPrice ? (r.newPrice * (1 - m / 100)).toFixed(2) : '';
+            return `${i + 1}. ${r.productName} | Barcode: ${r.barcode || ''} | Selling Price: ${sp} | Cost Price: ${cp} | Margin: ${m}%`;
+          })
+          .join('\n')
+        : 'No items provided.');
+
+    // HTML table (email-safe inline CSS)
+    const html = `
+      <div style="font-family:Arial,system-ui,sans-serif;font-size:13px;color:#222;line-height:1.4;">
+        <p style="margin:0 0 10px 0;">
+          ${(this.message || '').replace(/\n/g, '<br/>')}
+        </p>
+
+        <table cellpadding="4" cellspacing="0"
+              style="
+                width:760px;
+                max-width:760px;
+                border-collapse:collapse;
+                background:#ffffff;
+                border:1px solid #cfd3da;
+                table-layout:fixed;
+              ">
+          <thead>
+            <tr style="background:#6b7280;color:#ffffff;">
+              <th align="left"
+                  style="width:260px;border:1px solid #cfd3da;font-weight:700;">
+                PRODUCT
+              </th>
+
+              <th align="center"
+                  style="width:140px;border:1px solid #cfd3da;font-weight:700;">
+                BARCODE
+              </th>
+
+              <th align="right"
+                  style="width:120px;border:1px solid #cfd3da;font-weight:700;">
+                SELLING PRICE
+              </th>
+
+              <th align="right"
+                  style="width:120px;border:1px solid #cfd3da;font-weight:700;">
+                COST PRICE
+              </th>
+
+              <th align="center"
+                  style="width:80px;border:1px solid #cfd3da;font-weight:700;">
+                MARGIN
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${rows.length
+        ? rows.map((r) => {
+          const m = r.margin ?? 15;
+          const sp = r.newPrice ?? '';
+          const cp = r.newPrice ? (r.newPrice * (1 - m / 100)).toFixed(2) : '';
+          return `
+                      <tr>
+                        <td style="
+                          border:1px solid #d5d8de;
+                          padding:4px 6px;
+                          font-weight:600;
+                          white-space:nowrap;
+                          overflow:hidden;
+                          text-overflow:ellipsis;
+                        ">
+                          ${this.escapeHtml(r.productName)}
+                        </td>
+
+                        <td align="center"
+                            style="border:1px solid #d5d8de;padding:4px 6px;">
+                          ${this.escapeHtml(r.barcode || '')}
+                        </td>
+
+                        <td align="right"
+                            style="border:1px solid #d5d8de;padding:4px 6px;">
+                          ${sp}
+                        </td>
+
+                        <td align="right"
+                            style="border:1px solid #d5d8de;padding:4px 6px;">
+                          ${cp}
+                        </td>
+
+                        <td align="center"
+                            style="border:1px solid #d5d8de;padding:4px 6px;">
+                          ${m}%
+                        </td>
+                      </tr>
+                    `;
+        }).join('')
+        : `
+                  <tr>
+                    <td colspan="5"
+                        style="border:1px solid #d5d8de;padding:10px;color:#666;">
+                      <i>No items provided.</i>
+                    </td>
+                  </tr>
+                `
+      }
+          </tbody>
+        </table>
+      </div>
+    `.trim();
+
+    return { text, html };
+  }
+
   async sendEmail() {
     const to = this.toList.split(',').map(s => s.trim()).filter(Boolean);
     if (!to.length) {
@@ -231,71 +351,32 @@ export class PriceChangeComponent implements OnInit {
       return;
     }
 
+    const rows = this.validRows();
+
     try {
       this.isEmailing = true;
 
       // 1) Build workbook & base64
       const { wb, XLSX } = await this.buildWorkbook();
-      const base64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
+      const fileBase64 = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
 
-      // 2) Email summary (HTML + Text) — Old Price remains visible in email
-      const rows = this.validRows();
-      const htmlTable = rows.length
-        ? `
-          <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
-            <thead>
-              <tr>
-                <th align="left"><strong>No</strong></th>
-                <th align="left"><strong>Barcode</strong></th>
-                <th align="left"><strong>Product</strong></th>
-                <th align="right"><strong>SP</strong></th>
-                <th align="right"><strong>CP</strong></th>
-                <th align="right"><strong>Margin</strong></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map((r, i) => {
-                const marginNum = r.margin ?? 15;
-                const cp = r.newPrice ? (r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
-                const sp = r.newPrice ?? '';
-                return `
-                  <tr>
-                    <td>${i + 1}</td>
-                    <td>${r.barcode || ''}</td>
-                    <td>${r.productName}</td>
-                    <td align="right">${sp}</td>
-                    <td align="right">${cp}</td>
-                    <td align="right">${marginNum}%</td>
-                  </tr>`;
-              }).join('')}
-            </tbody>
-          </table>`
-        : `<p><i>No items provided.</i></p>`;
-
-      const textList = rows.length
-        ? rows.map((r, i) => {
-            const marginNum = r.margin ?? 15;
-            const cp = r.newPrice ? (r.newPrice * (1 - marginNum / 100)).toFixed(2) : '';
-            const sp = r.newPrice ?? '';
-            return `${i + 1}. ${r.productName} | Barcode: ${r.barcode || ''} | Selling Price: ${sp} | Cost Price: ${cp} | Margin: ${marginNum}%`;
-          }).join('\n')
-        : 'No items provided.';
-
-      const messageHtml =
-        `<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;line-height:1.4;">
-          <p>${(this.message || '').replace(/\n/g, '<br/>')}</p>
-          ${htmlTable}
-        </div>`;
-
-      const messageText = `${this.message || ''}\n\n${textList}`;
+      // 2) Email body (TABLE like your 2nd image)
+      const { text, html } = this.buildTableEmail(rows);
 
       // 3) Send
       await this.priceSvc.sendEmail({
         to,
         subject: this.subject,
-        message: messageText, // plaintext fallback
+
+        // keep for backward compatibility (if backend still reads "message")
+        message: text,
+
+        // new fields (if backend supports)
+        text,
+        html,
+
         filename: this.filename,
-        fileBase64: base64,
+        fileBase64,
       }).toPromise();
 
       this.toast.success('Email sent!');
