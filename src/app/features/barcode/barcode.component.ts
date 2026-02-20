@@ -770,4 +770,85 @@ export class BarcodeComponent implements OnInit {
     this.products.forEach((p) => this.generateBarcode(p));
     this.cdRef.detectChanges();
   }
+
+  // 🧪 Print ALL barcodes at once (testing)
+  printAllBarcodesTest() {
+    // Ensure names are loaded
+    if (!this.nameOptions || this.nameOptions.length === 0) {
+      alert('Names not loaded yet. Please wait a moment.');
+      return;
+    }
+
+    // Choose list according to style (Reliance = vegetables only per your getter)
+    const list = this.selectedPrintStyle === 'reliance'
+      ? this.nameOptions.filter(n => n.type?.toLowerCase() === 'vegetable')
+      : this.nameOptions;
+
+    // Build printItems directly (quantity = 1 each for test)
+    this.printItems = list
+      .map((n) => {
+        const category = n.type
+          ? n.type.charAt(0).toUpperCase() + n.type.slice(1)
+          : '';
+
+        const expiryDays = n.expiryDays ?? 1;
+
+        const packed = new Date(this.packedOnDate);
+        packed.setDate(packed.getDate() + expiryDays);
+        const expiryDate = packed.toISOString().split('T')[0];
+
+        const item: any = {
+          nameId: n.id,
+          productName: `${n.name} ${n.units}`,
+          units: n.units,
+          category,
+          mrp: Number(n.mrp ?? 0),
+          quantity: 1,
+          expiryDays,
+          expiryDate,
+          dbBarcode: n.barcode || '',
+          barcode: '',
+        };
+
+        // Generates barcode based on your current style rules
+        this.generateBarcode(item);
+
+        return item;
+      })
+      // keep only valid printable items
+      .filter(p => p.productName && p.mrp > 0 && p.barcode);
+
+    if (this.printItems.length === 0) {
+      alert('No valid items to print (check MRP/barcode/category).');
+      return;
+    }
+
+    // Reuse the SAME print flow you already have
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) return;
+
+    doc.open();
+    doc.write(this.generatePrintHTML());
+    doc.close();
+
+    iframe.onload = () => {
+      this.renderBarcodesInWindow(iframe.contentWindow as Window).then(() => {
+        iframe.contentWindow?.focus();
+        iframe.contentWindow?.print();
+
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+        }, 1000);
+      });
+    };
+  }
 }
