@@ -7,19 +7,22 @@ import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { execFile } from 'child_process';
+
 const require = createRequire(import.meta.url);
 const { print: printPdf } = require('pdf-to-printer');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// ⏰ IST time formatter for logs
+// IST time formatter for logs
 function getISTTime() {
   const date = new Date();
   return new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })).toISOString();
 }
 
 const logFilePath = path.join(app.getPath('userData'), 'log.txt');
+
 function log(message) {
   const timestamp = getISTTime();
   fs.appendFileSync(logFilePath, `[${timestamp}] ${message}\n`);
@@ -36,7 +39,7 @@ async function loadWithRetry(win, url, attempts = 15, delayMs = 300) {
       return;
     } catch (e) {
       log(`Load attempt ${i + 1} failed: ${e?.message || e}`);
-      await new Promise(r => setTimeout(r, delayMs));
+      await new Promise((r) => setTimeout(r, delayMs));
     }
   }
   await win.loadURL(url);
@@ -57,20 +60,19 @@ const createWindow = () => {
   });
 
   const url = 'http://localhost:3001';
-  loadWithRetry(mainWindow, url).catch(err =>
-    log(`❌ Final load failed: ${err?.message || err}`)
+  loadWithRetry(mainWindow, url).catch((err) =>
+    log(`Final load failed: ${err?.message || err}`)
   );
   log(`Loaded URL: ${url}`);
 
   mainWindow.webContents.on('did-finish-load', () => {
-    log('✅ Renderer finished loading.');
+    log('Renderer finished loading.');
   });
 
-  mainWindow.webContents.on('did-fail-load', (e, code, desc, validatedURL) => {
-    log(`❌ Renderer failed to load ${validatedURL}: ${desc} (${code})`);
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, validatedURL) => {
+    log(`Renderer failed to load ${validatedURL}: ${desc} (${code})`);
   });
 
-  // ✅ Allow Angular SPA navigations, block only true external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const sameOrigin =
       url.startsWith('http://localhost:3001') ||
@@ -91,13 +93,12 @@ const createWindow = () => {
     }
   });
 
-  // Debug renderer crashes
   mainWindow.webContents.on('render-process-gone', (_e, details) => {
-    log(`❌ render-process-gone: ${details.reason}`);
+    log(`render-process-gone: ${details.reason}`);
   });
 
   mainWindow.webContents.on('console-message', (_e, level, message, line, sourceId) => {
-    log(`🧪 console[${level}] ${sourceId}:${line} ${message}`);
+    log(`console[${level}] ${sourceId}:${line} ${message}`);
   });
 
   if (!app.isPackaged) {
@@ -106,14 +107,13 @@ const createWindow = () => {
 };
 
 /* ======================
-   GENTLE REFOCUS (single, no minimize/restore)
+   GENTLE REFOCUS
    ====================== */
 
 function getMainWindow() {
-  return BrowserWindow.getAllWindows().find(w => !w.isDestroyed()) || mainWindow;
+  return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) || mainWindow;
 }
 
-/** A light, non-intrusive focus nudge */
 function gentleRefocus() {
   const w = getMainWindow();
   if (!w) return;
@@ -133,64 +133,64 @@ function sanitizeFilename(name) {
   return String(name || 'Invoice.pdf').replace(/[\\/:*?"<>|]/g, '_').trim();
 }
 
-ipcMain.handle('ui:refocus-hard', () => { gentleRefocus(); });
+ipcMain.handle('ui:refocus-hard', () => {
+  gentleRefocus();
+});
 
 /* ======================
    PRINT HELPERS (PDF → SPOOL)
    ====================== */
 
-// Microns helper (Electron uses µm for custom sizes)
-const mm = n => n * 1000;
+const mm = (n) => n * 1000;
 
-// Common sizes
 const SIZES = {
   A4: 'A4',
-  LABEL_50x50: { width: mm(50), height: mm(50) },
   LABEL_38x25: { width: mm(38), height: mm(25) },
 };
 
-// Preferred queue names
 const PRINTER_PREFERENCES = {
   CANON: [
     'Canon LBP2900',
     'Canon LBP2900 on NEW-PC2017',
     '\\\\NEW-PC2017\\Canon LBP2900',
   ],
-  CITIZEN: ['Citizen CL-E321', 'CITIZEN CL-E321']
+  DMART_CITIZEN: 'Citizen CL-E321 (Copy 1)',
 };
 
 async function listPrinters(win) {
   const wc = win.webContents;
-  if (typeof wc.getPrintersAsync === 'function') return (await wc.getPrintersAsync()) || [];
+  if (typeof wc.getPrintersAsync === 'function') {
+    return (await wc.getPrintersAsync()) || [];
+  }
   return wc.getPrinters() || [];
 }
-const normalize = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+const normalize = (s) => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 async function resolvePrinterName(win, preferredNames) {
   const printers = await listPrinters(win);
-  const names = printers.map(p => p.name);
+  const names = printers.map((p) => p.name);
   log(`Available printers: ${JSON.stringify(names)}`);
 
-  // exact case-sensitive
   for (const want of preferredNames) {
-    const found = printers.find(p => p.name === want);
+    const found = printers.find((p) => p.name === want);
     if (found) return found.name;
   }
-  // exact case-insensitive
+
   const prefNorm = preferredNames.map(normalize);
   for (const p of printers) {
     if (prefNorm.includes(normalize(p.name))) return p.name;
   }
-  // fuzzy contains (case-insensitive)
+
   for (const want of prefNorm) {
-    const found = printers.find(p => normalize(p.name).includes(want));
+    const found = printers.find((p) => normalize(p.name).includes(want));
     if (found) return found.name;
   }
+
   return null;
 }
 
 function createPrintWindow() {
-  // hidden, unfocusable, not modal
   return new BrowserWindow({
     show: false,
     width: 600,
@@ -199,13 +199,19 @@ function createPrintWindow() {
     skipTaskbar: true,
     minimizable: false,
     maximizable: false,
-    webPreferences: { backgroundThrottling: false, offscreen: false },
+    webPreferences: {
+      backgroundThrottling: false,
+      offscreen: false,
+    },
   });
 }
 
 function htmlFromDataUrl(dataUrl) {
   const m = /^data:text\/html(?:;charset=[^;]+)?(;base64)?,(.*)$/i.exec(dataUrl || '');
-  if (!m) return '<!doctype html><meta charset="utf-8"><p>Invalid data URL</p>';
+  if (!m) {
+    return '<!doctype html><meta charset="utf-8"><p>Invalid data URL</p>';
+  }
+
   const isB64 = Boolean(m[1]);
   try {
     return isB64
@@ -223,30 +229,32 @@ async function loadHtmlIntoWindow(win, html) {
     document.write(${JSON.stringify(html)});
     document.close();
   `);
-  await new Promise(r => setTimeout(r, 120)); // allow layout/paint
+
+  await new Promise((r) => setTimeout(r, 120));
 }
 
-// Write a temp PDF file; return absolute path
 function writeTempPdf(buffer, prefix = 'jt-invoice') {
   const dir = app.getPath('temp') || os.tmpdir();
-  const file = path.join(dir, `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+  const file = path.join(
+    dir,
+    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`
+  );
   fs.writeFileSync(file, buffer);
   return file;
 }
 
-// The core: render to PDF then spool to printer
 async function printHtmlViaPdfSpool({ html, printerName, pageSize, landscape = false, copies = 1 }) {
   const win = createPrintWindow();
   let pdfPath = '';
+
   try {
     await loadHtmlIntoWindow(win, html);
 
-    // Render to PDF (A4 or custom µm)
     const pdfBuffer = await win.webContents.printToPDF({
       printBackground: true,
       landscape,
       marginsType: 1,
-      pageSize, // 'A4' or {width,height} in µm
+      pageSize,
     });
 
     pdfPath = writeTempPdf(pdfBuffer, 'jt-bill');
@@ -258,21 +266,190 @@ async function printHtmlViaPdfSpool({ html, printerName, pageSize, landscape = f
       copies: Math.max(1, Math.floor(copies || 1)),
     });
 
-    log('✅ Spool finished');
+    log('Spool finished');
   } finally {
-    try { if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath); } catch {}
-    try { if (!win.isDestroyed()) win.close(); } catch {}
+    try {
+      if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+    } catch {}
+
+    try {
+      if (!win.isDestroyed()) win.close();
+    } catch {}
   }
 }
 
+function escapeForPowerShellSingleQuoted(str) {
+  return String(str).replace(/'/g, "''");
+}
+
+function sendRawToPrinterWindows(printerName, rawData) {
+  return new Promise((resolve, reject) => {
+    const psScript = `
+Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class RawPrinterHelper {
+  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
+  public class DOCINFOA {
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDocName;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pOutputFile;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string pDataType;
+  }
+
+  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool OpenPrinter(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);
+
+  [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true)]
+  public static extern bool ClosePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint="StartDocPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
+  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In] DOCINFOA di);
+
+  [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true)]
+  public static extern bool EndDocPrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true)]
+  public static extern bool StartPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true)]
+  public static extern bool EndPagePrinter(IntPtr hPrinter);
+
+  [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true)]
+  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
+}
+"@
+
+$printerName = '${escapeForPowerShellSingleQuoted(printerName)}'
+$raw = @'
+${rawData}
+'@
+
+$bytes = [System.Text.Encoding]::ASCII.GetBytes($raw)
+$hPrinter = [IntPtr]::Zero
+$docInfo = New-Object RawPrinterHelper+DOCINFOA
+$docInfo.pDocName = "JTFV Dmart Label"
+$docInfo.pDataType = "RAW"
+
+if (-not [RawPrinterHelper]::OpenPrinter($printerName, [ref]$hPrinter, [IntPtr]::Zero)) {
+  throw "OpenPrinter failed for: $printerName"
+}
+
+try {
+  if (-not [RawPrinterHelper]::StartDocPrinter($hPrinter, 1, $docInfo)) {
+    throw "StartDocPrinter failed"
+  }
+
+  try {
+    if (-not [RawPrinterHelper]::StartPagePrinter($hPrinter)) {
+      throw "StartPagePrinter failed"
+    }
+
+    $ptr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+    try {
+      [System.Runtime.InteropServices.Marshal]::Copy($bytes, 0, $ptr, $bytes.Length)
+      $written = 0
+      if (-not [RawPrinterHelper]::WritePrinter($hPrinter, $ptr, $bytes.Length, [ref]$written)) {
+        throw "WritePrinter failed"
+      }
+      if ($written -ne $bytes.Length) {
+        throw "WritePrinter wrote $written of $($bytes.Length) bytes"
+      }
+    }
+    finally {
+      [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
+    }
+
+    [void][RawPrinterHelper]::EndPagePrinter($hPrinter)
+  }
+  finally {
+    [void][RawPrinterHelper]::EndDocPrinter($hPrinter)
+  }
+}
+finally {
+  [void][RawPrinterHelper]::ClosePrinter($hPrinter)
+}
+`;
+
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
+      { windowsHide: true, maxBuffer: 1024 * 1024 * 10 },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || stdout || error.message));
+          return;
+        }
+        resolve({ stdout, stderr });
+      }
+    );
+  });
+}
+
+function zplSafeText(value, maxLen = 40) {
+  return String(value ?? '')
+    .replace(/[\^~\\]/g, ' ')
+    .replace(/\r/g, ' ')
+    .replace(/\n/g, ' ')
+    .trim()
+    .slice(0, maxLen);
+}
+
+function formatDateForLabel(dateStr) {
+  const d = new Date(dateStr);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(-2);
+  return `${dd}.${mm}.${yy}`;
+}
+
+function buildDmartZpl(items, packedOnDate, copies = 1) {
+  return items.map((p) => {
+    const productName = zplSafeText(p.productName, 22);
+    const barcode = zplSafeText(p.barcode, 20);
+    const mrp = Number(p.mrp || 0).toFixed(2);
+    const pkd = formatDateForLabel(packedOnDate);
+    const exp = formatDateForLabel(p.expiryDate);
+
+    return `
+^XA
+^PW304
+^LL200
+^LH0,0
+^CI28
+
+^FO95,4^A0N,20,20^FB180,1,0,C,0^FDJ T FRUITS & VEG^FS
+^FO10,26^A0N,22,22^FB250,1,0,C,0^FD${productName}^FS
+
+^FO18,52^BY2,2,42^BCN,42,N,N,N^FD${barcode}^FS
+^FO26,98^A0N,24,24^FD${barcode}^FS
+
+^FO8,126^A0N,22,22^FDM.R.P.^FS
+^FO8,148^A0N,24,24^FD${mrp}^FS
+
+^FO145,126^A0N,20,20^FDPkd. On ${pkd}^FS
+^FO145,148^A0N,20,20^FDExp. Dt. ${exp}^FS
+
+^FO12,174^A0N,18,18^FDIncl. of all Taxes)^FS
+
+^FO278,52^A0B,28,28^FDDmart^FS
+
+^PQ${Math.max(1, Math.floor(copies || 1))}
+^XZ`.trim();
+  }).join('\n');
+}
+
 /* ======================
-   IPC HANDLERS (PDF SAVE + PRINT)
+   IPC HANDLERS
    ====================== */
 
-// NEW: Save a real A4 PDF to Documents (used by Reports → Download)
 ipcMain.handle('save-pdf-a4', async (_event, dataUrl, opts) => {
-  log(`IPC save-pdf-a4 URL len=${(dataUrl||'').length}`);
+  log(`IPC save-pdf-a4 URL len=${(dataUrl || '').length}`);
   const win = createPrintWindow();
+
   try {
     const html = htmlFromDataUrl(dataUrl);
     await loadHtmlIntoWindow(win, html);
@@ -280,23 +457,24 @@ ipcMain.handle('save-pdf-a4', async (_event, dataUrl, opts) => {
     const pdfBuffer = await win.webContents.printToPDF({
       printBackground: true,
       landscape: !!opts?.landscape,
-      marginsType: 0,           // use custom margins (if you add later)
-      pageSize: 'A4'
+      marginsType: 0,
+      pageSize: 'A4',
     });
 
-    // ✅ CHANGED: Documents -> Desktop
     const defaultName = sanitizeFilename(opts?.filename || `Invoice_${Date.now()}.pdf`);
     const savePath = path.join(app.getPath('desktop'), defaultName);
 
     fs.writeFileSync(savePath, pdfBuffer);
 
-    log(`✅ PDF saved to Desktop: ${savePath}`);
+    log(`PDF saved to Desktop: ${savePath}`);
     return { ok: true, path: savePath };
   } catch (err) {
-    log(`❌ save-pdf-a4 error: ${err?.message || err}`);
+    log(`save-pdf-a4 error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
-    try { if (!win.isDestroyed()) win.close(); } catch {}
+    try {
+      if (!win.isDestroyed()) win.close();
+    } catch {}
     gentleRefocus();
   }
 });
@@ -306,92 +484,65 @@ ipcMain.handle('print:list', async () => {
   try {
     return await listPrinters(win);
   } catch (err) {
-    log(`❌ print:list error: ${err?.message || err}`);
+    log(`print:list error: ${err?.message || err}`);
     return [];
   } finally {
-    try { if (!win.isDestroyed()) win.close(); } catch {}
+    try {
+      if (!win.isDestroyed()) win.close();
+    } catch {}
   }
 });
 
 ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies = 1 } = {}) => {
-  log(`IPC print:canon-a4 URL len=${(url||'').length}, copies=${copies}`);
+  log(`IPC print:canon-a4 URL len=${(url || '').length}, copies=${copies}`);
   const win = createPrintWindow();
+
   try {
     const html = htmlFromDataUrl(url);
-
-    // pick printer
     const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CANON);
-    if (!deviceName) return { ok: false, error: 'Canon LBP2900 printer not found.' };
 
-    // PDF → spool route (silent)
+    if (!deviceName) {
+      return { ok: false, error: 'Canon LBP2900 printer not found.' };
+    }
+
     await printHtmlViaPdfSpool({
       html,
       printerName: deviceName,
       pageSize: SIZES.A4,
       landscape,
-      copies
+      copies,
     });
 
     return { ok: true };
   } catch (err) {
-    log(`❌ IPC print:canon-a4 error: ${err?.message || err}`);
+    log(`print:canon-a4 error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
-    try { if (!win.isDestroyed()) win.close(); } catch {}
-    gentleRefocus(); // soft refocus after print
-  }
-});
-
-ipcMain.handle('print:citizen-50', async (_event, { url, copies = 1 } = {}) => {
-  log(`IPC print:citizen-50 URL len=${(url||'').length}, copies=${copies}`);
-  const win = createPrintWindow();
-  try {
-    const html = htmlFromDataUrl(url);
-
-    const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CITIZEN);
-    if (!deviceName) return { ok: false, error: 'Citizen CL-E321 printer not found.' };
-
-    await printHtmlViaPdfSpool({
-      html,
-      printerName: deviceName,
-      pageSize: SIZES.LABEL_50x50,
-      landscape: false,
-      copies
-    });
-
-    return { ok: true };
-  } catch (err) {
-    log(`❌ IPC print:citizen-50 error: ${err?.message || err}`);
-    return { ok: false, error: String(err?.message || err) };
-  } finally {
-    try { if (!win.isDestroyed()) win.close(); } catch {}
+    try {
+      if (!win.isDestroyed()) win.close();
+    } catch {}
     gentleRefocus();
   }
 });
 
-ipcMain.handle('print:citizen-38x25', async (_event, { url, copies = 1 } = {}) => {
-  log(`IPC print:citizen-38x25 URL len=${(url||'').length}, copies=${copies}`);
-  const win = createPrintWindow();
+ipcMain.handle('print:dmart-38x25', async (_event, payload = {}) => {
+  const { items = [], packedOnDate, copies = 1 } = payload;
+  log(`IPC print:dmart-38x25 RAW items=${items.length}, copies=${copies}`);
+
   try {
-    const html = htmlFromDataUrl(url);
+    const printerName = 'Citizen CL-E321 (Copy 1)';
+    const zpl = buildDmartZpl(items, packedOnDate, copies);
 
-    const deviceName = await resolvePrinterName(win, PRINTER_PREFERENCES.CITIZEN);
-    if (!deviceName) return { ok: false, error: 'Citizen CL-E321 printer not found.' };
+    log(`Using RAW Dmart printer: ${printerName}`);
+    log(`ZPL length: ${zpl.length}`);
 
-    await printHtmlViaPdfSpool({
-      html,
-      printerName: deviceName,
-      pageSize: SIZES.LABEL_38x25, // custom size
-      landscape: false,
-      copies
-    });
+    await sendRawToPrinterWindows(printerName, zpl);
 
     return { ok: true };
   } catch (err) {
-    log(`❌ IPC print:citizen-38x25 error: ${err?.message || err}`);
+    log(`print:dmart-38x25 RAW error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
-    try { if (!win.isDestroyed()) win.close(); } catch {}
     gentleRefocus();
   }
 });
@@ -403,18 +554,17 @@ ipcMain.handle('print:citizen-38x25', async (_event, { url, copies = 1 } = {}) =
 app.whenReady().then(() => {
   const isDev = !app.isPackaged;
 
-  // ✅ Use unified unpacked folder in production: app_data
   const basePath = isDev
     ? __dirname
     : path.join(process.resourcesPath, 'app_data');
 
   const serverPath = path.join(basePath, 'server.cjs');
   const nodeModulesPath = path.join(basePath, 'node_modules');
-  const angularDistPath = path.join(basePath, 'dist', 'my-login-app'); // currently logged only
+  const angularDistPath = path.join(basePath, 'dist', 'my-login-app');
   const userDataPath = app.getPath('userData');
 
   log('======================');
-  log('🚀 App starting up...');
+  log('App starting up...');
   log(`Environment: ${isDev ? 'Development' : 'Production'}`);
   log(`Server path: ${serverPath}`);
   log(`Angular dist path: ${angularDistPath}`);
@@ -429,7 +579,7 @@ app.whenReady().then(() => {
       NODE_ENV: isDev ? 'development' : 'production',
       RUNNING_IN_ELECTRON: 'true',
       USER_DATA_PATH: userDataPath,
-      NODE_PATH: nodeModulesPath
+      NODE_PATH: nodeModulesPath,
     }
   });
 
@@ -438,7 +588,7 @@ app.whenReady().then(() => {
   });
 
   serverProcess.stderr.on('data', (data) => {
-    log(`❗ Server Error: ${data.toString().trim()}`);
+    log(`Server Error: ${data.toString().trim()}`);
   });
 
   serverProcess.on('close', (code) => {
@@ -454,7 +604,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   log('All windows closed.');
-  // Keep server alive until app.quit()
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -462,16 +611,21 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   log('App quitting. Killing server process...');
-  if (serverProcess) try { serverProcess.kill(); } catch {}
+  if (serverProcess) {
+    try {
+      serverProcess.kill();
+    } catch {}
+  }
 });
 
 /* ======================
    MAIN-PROCESS SAFETY
    ====================== */
+
 process.on('uncaughtException', (err) => {
-  log(`❌ Main uncaughtException: ${err?.stack || err}`);
-  // don't exit — keep the app alive
+  log(`Main uncaughtException: ${err?.stack || err}`);
 });
+
 process.on('unhandledRejection', (reason) => {
-  log(`❌ Main unhandledRejection: ${reason?.stack || reason}`);
+  log(`Main unhandledRejection: ${reason?.stack || reason}`);
 });

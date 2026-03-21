@@ -33,6 +33,7 @@ import { EditRelianceBillsComponent } from './features/bills/edit-reliance-bills
 import { LabelPrintHistoryComponent } from './features/barcode/label-print-history/label-print-history.component';
 import { PriceChangeComponent } from './features/price-change/price-change.component';
 import { ToastContainerComponent } from './features/toast-container/toast-container.component';
+import { DmartComponent } from './features/barcode/dmart/dmart.component';
 
 
 @NgModule({
@@ -74,6 +75,7 @@ import { ToastContainerComponent } from './features/toast-container/toast-contai
     LabelPrintHistoryComponent,
     PriceChangeComponent,
     ToastContainerComponent,
+    DmartComponent,
   ],
 
   providers: [],

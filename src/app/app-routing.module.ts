@@ -17,6 +17,7 @@ import { ReportsComponent } from './features/bills/reports/reports.component';
 import { PriceChangeComponent } from './features/price-change/price-change.component';
 import { BarcodeComponent } from './features/barcode/barcode.component';
 import { LabelPrintHistoryComponent } from './features/barcode/label-print-history/label-print-history.component';
+import { DmartComponent } from './features/barcode/dmart/dmart.component';
 
 const routes: Routes = [
   { path: 'login', component: LoginComponent },
@@ -36,6 +37,7 @@ const routes: Routes = [
   { path: 'price-change', component: PriceChangeComponent},
   { path: 'barcode', component: BarcodeComponent },
   { path: 'label-history', component: LabelPrintHistoryComponent },
+  { path: 'dmart', component: DmartComponent },
   { path: '', redirectTo: '/login', pathMatch: 'full' },
 ];
 
