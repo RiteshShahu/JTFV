@@ -1,6 +1,7 @@
 // preload.cjs
-// contextIsolation: true, nodeIntegration: false
 const { contextBridge, ipcRenderer } = require('electron');
+
+console.log('PRELOAD LOADED - NEW VERSION');
 
 contextBridge.exposeInMainWorld('electron', {
   listPrinters: async () => {
@@ -22,7 +23,6 @@ contextBridge.exposeInMainWorld('electron', {
     }
   },
 
-  // RAW Dmart 38x25 printing
   printDmart38x25: async (payload) => {
     try {
       return await ipcRenderer.invoke('print:dmart-38x25', payload);

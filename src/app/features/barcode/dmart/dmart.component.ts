@@ -214,7 +214,7 @@ export class DmartComponent implements OnInit {
       const payload = this.buildJobPayload();
 
       this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => {},
+        next: () => { },
         error: (e) => console.error('Failed to log print job:', e),
       });
 
@@ -229,13 +229,15 @@ export class DmartComponent implements OnInit {
         })),
       };
 
-      const electronApi = (window as any).electronAPI;
-      if (!electronApi?.printDmart38x25) {
+      const electron = (window as any).electron;
+      console.log('window.electron =', electron);
+
+      if (!electron || typeof electron.printDmart38x25 !== 'function') {
         alert('Electron print API not available.');
         return;
       }
 
-      electronApi.printDmart38x25(rawPayload).then((result: any) => {
+      electron.printDmart38x25(rawPayload).then((result: any) => {
         if (!result?.ok) {
           alert(result?.error || 'Print failed');
         }
@@ -243,6 +245,8 @@ export class DmartComponent implements OnInit {
     } catch (e) {
       console.error('Failed to print:', e);
     }
+    console.log('window.electron =', (window as any).electron);
+    console.log('printDmart38x25 =', (window as any).electron?.printDmart38x25);
   }
 
   testPreview() {
