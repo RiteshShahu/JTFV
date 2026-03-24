@@ -207,6 +207,22 @@ export class DmartComponent implements OnInit {
     };
   }
 
+  private getBarcodeDataUrl(barcode: string): string {
+    const canvas = document.createElement('canvas');
+
+    bwipjs.toCanvas(canvas, {
+      bcid: 'code128',
+      text: barcode,
+      scale: 1.6,
+      height: 8,
+      includetext: false,
+      textxalign: 'center',
+      backgroundcolor: 'FFFFFF',
+    });
+
+    return canvas.toDataURL('image/png');
+  }
+
   printSelected() {
     this.preparePrintItems();
 
@@ -218,15 +234,9 @@ export class DmartComponent implements OnInit {
         error: (e) => console.error('Failed to log print job:', e),
       });
 
-      const rawPayload = {
-        packedOnDate: this.packedOnDate,
+      const htmlPayload = {
+        html: this.generatePrintHTML(),
         copies: 1,
-        items: this.printItems.map((p) => ({
-          productName: p.productName,
-          mrp: Number(p.mrp),
-          expiryDate: p.expiryDate,
-          barcode: p.barcode,
-        })),
       };
 
       const electron = (window as any).electron;
@@ -237,7 +247,7 @@ export class DmartComponent implements OnInit {
         return;
       }
 
-      electron.printDmart38x25(rawPayload).then((result: any) => {
+      electron.printDmart38x25(htmlPayload).then((result: any) => {
         if (!result?.ok) {
           alert(result?.error || 'Print failed');
         }
@@ -442,7 +452,7 @@ export class DmartComponent implements OnInit {
           <span class="side-brand">Dmart</span>
           <div class="label-header">J T FRUITS &amp; VEG</div>
           <div class="label-product">${p.productName}</div>
-          <img id="dmart-bar-${i}" />
+          <img src="${this.getBarcodeDataUrl(p.barcode)}" />
           <div class="barcode-value">${p.barcode}</div>
 
           <div class="info-row">

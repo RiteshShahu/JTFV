@@ -417,8 +417,10 @@ function buildDmartZpl(items, packedOnDate, copies = 1) {
     return `
 ^XA
 ^PW304
-^LL200
+^LL188
 ^LH0,0
+^LS0
+^LT0
 ^CI28
 
 ^FO95,4^A0N,20,20^FB180,1,0,C,0^FDJ T FRUITS & VEG^FS
@@ -435,7 +437,7 @@ function buildDmartZpl(items, packedOnDate, copies = 1) {
 
 ^FO12,174^A0N,18,18^FDIncl. of all Taxes)^FS
 
-^FO278,52^A0B,28,28^FDDmart^FS
+^FO270,52^A0B,28,28^FDDmart^FS
 
 ^PQ${Math.max(1, Math.floor(copies || 1))}
 ^XZ`.trim();
