@@ -7,7 +7,6 @@ import fs from 'fs';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { execFile } from 'child_process';
 
 const require = createRequire(import.meta.url);
 const { print: printPdf } = require('pdf-to-printer');
@@ -118,14 +117,14 @@ function gentleRefocus() {
   const w = getMainWindow();
   if (!w) return;
 
-  try { app.focus({ steal: true }); } catch {}
-  try { w.setAlwaysOnTop(true, 'screen-saver'); } catch {}
-  try { w.show(); w.focus(); w.webContents.focus(); } catch {}
-  try { w.moveTop?.(); } catch {}
+  try { app.focus({ steal: true }); } catch { }
+  try { w.setAlwaysOnTop(true, 'screen-saver'); } catch { }
+  try { w.show(); w.focus(); w.webContents.focus(); } catch { }
+  try { w.moveTop?.(); } catch { }
 
   setTimeout(() => {
-    try { w.setAlwaysOnTop(false); } catch {}
-    try { w.focus(); w.webContents.focus(); } catch {}
+    try { w.setAlwaysOnTop(false); } catch { }
+    try { w.focus(); w.webContents.focus(); } catch { }
   }, 150);
 }
 
@@ -154,7 +153,7 @@ const PRINTER_PREFERENCES = {
     'Canon LBP2900 on NEW-PC2017',
     '\\\\NEW-PC2017\\Canon LBP2900',
   ],
-  DMART_CITIZEN: 'Citizen CL-E321 (Copy 1)',
+  DMART_CITIZEN: 'Citizen CL-E321',
 };
 
 async function listPrinters(win) {
@@ -230,218 +229,171 @@ async function loadHtmlIntoWindow(win, html) {
     document.close();
   `);
 
-  await new Promise((r) => setTimeout(r, 120));
+  await new Promise((r) => setTimeout(r, 80));
 }
 
-function writeTempPdf(buffer, prefix = 'jt-invoice') {
-  const dir = app.getPath('temp') || os.tmpdir();
-  const file = path.join(
-    dir,
-    `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`
-  );
-  fs.writeFileSync(file, buffer);
-  return file;
+async function waitForPrintAssets(win) {
+  await win.webContents.executeJavaScript(`
+    new Promise(async (resolve) => {
+      const imgs = Array.from(document.images || []);
+      await Promise.all(
+        imgs.map((img) => {
+          if (img.complete) return Promise.resolve();
+          return new Promise((res) => {
+            img.onload = res;
+            img.onerror = res;
+          });
+        })
+      );
+
+      try {
+        if (document.fonts && document.fonts.ready) {
+          await document.fonts.ready;
+        }
+      } catch {}
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  `);
 }
 
-async function printHtmlViaPdfSpool({ html, printerName, pageSize, landscape = false, copies = 1 }) {
+async function printHtmlDirect({ html, printerName, pageSize, landscape = false, copies = 1 }) {
   const win = createPrintWindow();
-  let pdfPath = '';
 
   try {
     await loadHtmlIntoWindow(win, html);
+    await waitForPrintAssets(win);
 
-    const pdfBuffer = await win.webContents.printToPDF({
-      printBackground: true,
-      landscape,
-      marginsType: 1,
-      pageSize,
+    await new Promise((resolve, reject) => {
+      win.webContents.print(
+        {
+          silent: true,
+          printBackground: true,
+          deviceName: printerName,
+          copies: Math.max(1, Math.floor(copies || 1)),
+          landscape,
+          pageSize,
+          margins: { marginType: 'none' },
+          scaleFactor: 100,
+        },
+        (success, failureReason) => {
+          if (!success) {
+            reject(new Error(failureReason || 'Direct print failed'));
+            return;
+          }
+          resolve(true);
+        }
+      );
     });
 
-    pdfPath = writeTempPdf(pdfBuffer, 'jt-bill');
-
-    log(`Spooling PDF to printer="${printerName}" copies=${copies} path=${pdfPath}`);
-
-    await printPdf(pdfPath, {
-      printer: printerName,
-      copies: Math.max(1, Math.floor(copies || 1)),
-    });
-
-    log('Spool finished');
+    log(`Direct print success to printer="${printerName}"`);
+    return true;
   } finally {
-    try {
-      if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
-    } catch {}
-
     try {
       if (!win.isDestroyed()) win.close();
     } catch {}
   }
 }
 
-function escapeForPowerShellSingleQuoted(str) {
-  return String(str).replace(/'/g, "''");
-}
-
-function sendRawToPrinterWindows(printerName, rawData) {
-  return new Promise((resolve, reject) => {
-    const psScript = `
-Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-
-public class RawPrinterHelper {
-  [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
-  public class DOCINFOA {
-    [MarshalAs(UnmanagedType.LPWStr)]
-    public string pDocName;
-    [MarshalAs(UnmanagedType.LPWStr)]
-    public string pOutputFile;
-    [MarshalAs(UnmanagedType.LPWStr)]
-    public string pDataType;
-  }
-
-  [DllImport("winspool.Drv", EntryPoint="OpenPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
-  public static extern bool OpenPrinter(string pPrinterName, out IntPtr phPrinter, IntPtr pDefault);
-
-  [DllImport("winspool.Drv", EntryPoint="ClosePrinter", SetLastError=true)]
-  public static extern bool ClosePrinter(IntPtr hPrinter);
-
-  [DllImport("winspool.Drv", EntryPoint="StartDocPrinterW", SetLastError=true, CharSet=CharSet.Unicode)]
-  public static extern bool StartDocPrinter(IntPtr hPrinter, Int32 level, [In] DOCINFOA di);
-
-  [DllImport("winspool.Drv", EntryPoint="EndDocPrinter", SetLastError=true)]
-  public static extern bool EndDocPrinter(IntPtr hPrinter);
-
-  [DllImport("winspool.Drv", EntryPoint="StartPagePrinter", SetLastError=true)]
-  public static extern bool StartPagePrinter(IntPtr hPrinter);
-
-  [DllImport("winspool.Drv", EntryPoint="EndPagePrinter", SetLastError=true)]
-  public static extern bool EndPagePrinter(IntPtr hPrinter);
-
-  [DllImport("winspool.Drv", EntryPoint="WritePrinter", SetLastError=true)]
-  public static extern bool WritePrinter(IntPtr hPrinter, IntPtr pBytes, Int32 dwCount, out Int32 dwWritten);
-}
-"@
-
-$printerName = '${escapeForPowerShellSingleQuoted(printerName)}'
-$raw = @'
-${rawData}
-'@
-
-$bytes = [System.Text.Encoding]::ASCII.GetBytes($raw)
-$hPrinter = [IntPtr]::Zero
-$docInfo = New-Object RawPrinterHelper+DOCINFOA
-$docInfo.pDocName = "JTFV Dmart Label"
-$docInfo.pDataType = "RAW"
-
-if (-not [RawPrinterHelper]::OpenPrinter($printerName, [ref]$hPrinter, [IntPtr]::Zero)) {
-  throw "OpenPrinter failed for: $printerName"
-}
-
-try {
-  if (-not [RawPrinterHelper]::StartDocPrinter($hPrinter, 1, $docInfo)) {
-    throw "StartDocPrinter failed"
-  }
+async function htmlToPngBuffer(html, widthPx = 304, heightPx = 200) {
+  const win = new BrowserWindow({
+    show: false,
+    width: widthPx,
+    height: heightPx,
+    useContentSize: true,
+    frame: false,
+    resizable: false,
+    webPreferences: {
+      backgroundThrottling: false,
+      offscreen: false,
+    },
+  });
 
   try {
-    if (-not [RawPrinterHelper]::StartPagePrinter($hPrinter)) {
-      throw "StartPagePrinter failed"
-    }
+    await loadHtmlIntoWindow(win, html);
+    await waitForPrintAssets(win);
 
-    $ptr = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($bytes.Length)
+    const image = await win.webContents.capturePage({
+      x: 0,
+      y: 0,
+      width: widthPx,
+      height: heightPx,
+    });
+
+    return image.toPNG();
+  } finally {
     try {
-      [System.Runtime.InteropServices.Marshal]::Copy($bytes, 0, $ptr, $bytes.Length)
-      $written = 0
-      if (-not [RawPrinterHelper]::WritePrinter($hPrinter, $ptr, $bytes.Length, [ref]$written)) {
-        throw "WritePrinter failed"
-      }
-      if ($written -ne $bytes.Length) {
-        throw "WritePrinter wrote $written of $($bytes.Length) bytes"
-      }
-    }
-    finally {
-      [System.Runtime.InteropServices.Marshal]::FreeHGlobal($ptr)
-    }
-
-    [void][RawPrinterHelper]::EndPagePrinter($hPrinter)
-  }
-  finally {
-    [void][RawPrinterHelper]::EndDocPrinter($hPrinter)
+      if (!win.isDestroyed()) win.close();
+    } catch {}
   }
 }
-finally {
-  [void][RawPrinterHelper]::ClosePrinter($hPrinter)
-}
-`;
 
-    execFile(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', psScript],
-      { windowsHide: true, maxBuffer: 1024 * 1024 * 10 },
-      (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(stderr || stdout || error.message));
-          return;
-        }
-        resolve({ stdout, stderr });
-      }
-    );
-  });
+function pngBufferToDataUrl(pngBuffer) {
+  return `data:image/png;base64,${pngBuffer.toString('base64')}`;
 }
 
-function zplSafeText(value, maxLen = 40) {
-  return String(value ?? '')
-    .replace(/[\^~\\]/g, ' ')
-    .replace(/\r/g, ' ')
-    .replace(/\n/g, ' ')
-    .trim()
-    .slice(0, maxLen);
-}
+function build38x25DriverPrintHtmlFromImages(imageDataUrls) {
+  const pages = imageDataUrls.map((dataUrl) => `
+    <div class="page">
+      <img src="${dataUrl}" />
+    </div>
+  `).join('');
 
-function formatDateForLabel(dateStr) {
-  const d = new Date(dateStr);
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yy = String(d.getFullYear()).slice(-2);
-  return `${dd}.${mm}.${yy}`;
-}
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page {
+      size: 38mm 25mm;
+      margin: 0;
+    }
 
-function buildDmartZpl(items, packedOnDate, copies = 1) {
-  return items.map((p) => {
-    const productName = zplSafeText(p.productName, 22);
-    const barcode = zplSafeText(p.barcode, 20);
-    const mrp = Number(p.mrp || 0).toFixed(2);
-    const pkd = formatDateForLabel(packedOnDate);
-    const exp = formatDateForLabel(p.expiryDate);
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 38mm;
+      background: #fff;
+    }
 
-    return `
-^XA
-^PW304
-^LL188
-^LH0,0
-^LS0
-^LT0
-^CI28
+    body {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
 
-^FO95,4^A0N,20,20^FB180,1,0,C,0^FDJ T FRUITS & VEG^FS
-^FO10,26^A0N,22,22^FB250,1,0,C,0^FD${productName}^FS
+    .page {
+      position: relative;
+      width: 38mm;
+      height: 25mm;
+      overflow: hidden;
+      background: #fff;
+      page-break-after: always;
+      break-after: page;
+    }
 
-^FO18,52^BY2,2,42^BCN,42,N,N,N^FD${barcode}^FS
-^FO26,98^A0N,24,24^FD${barcode}^FS
+    .page:last-child {
+      page-break-after: auto;
+      break-after: auto;
+    }
 
-^FO8,126^A0N,22,22^FDM.R.P.^FS
-^FO8,148^A0N,24,24^FD${mrp}^FS
-
-^FO145,126^A0N,20,20^FDPkd. On ${pkd}^FS
-^FO145,148^A0N,20,20^FDExp. Dt. ${exp}^FS
-
-^FO12,174^A0N,18,18^FDIncl. of all Taxes)^FS
-
-^FO270,52^A0B,28,28^FDDmart^FS
-
-^PQ${Math.max(1, Math.floor(copies || 1))}
-^XZ`.trim();
-  }).join('\n');
+    img {
+      position: absolute;
+      left: 0.8mm;     /* slightly right so left edge doesn't clip */
+      top: 0.2mm;
+      width: 39.1mm;   /* a little bigger */
+      height: 25.6mm;  /* a little bigger */
+      display: block;
+      object-fit: fill;
+    }
+  </style>
+</head>
+<body>
+  ${pages}
+</body>
+</html>`;
 }
 
 /* ======================
@@ -476,7 +428,7 @@ ipcMain.handle('save-pdf-a4', async (_event, dataUrl, opts) => {
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
     gentleRefocus();
   }
 });
@@ -491,7 +443,7 @@ ipcMain.handle('print:list', async () => {
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
   }
 });
 
@@ -522,27 +474,47 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
     gentleRefocus();
   }
 });
 
 ipcMain.handle('print:dmart-38x25', async (_event, payload = {}) => {
-  const { items = [], packedOnDate, copies = 1 } = payload;
-  log(`IPC print:dmart-38x25 RAW items=${items.length}, copies=${copies}`);
+  const { labelsHtml = [], copies = 1 } = payload;
+  log(`IPC print:dmart-38x25 labels=${labelsHtml.length}, copies=${copies}`);
 
   try {
-    const printerName = 'Citizen CL-E321 (Copy 1)';
-    const zpl = buildDmartZpl(items, packedOnDate, copies);
+    if (!Array.isArray(labelsHtml) || labelsHtml.length === 0) {
+      return { ok: false, error: 'No labels received for Dmart print.' };
+    }
 
-    log(`Using RAW Dmart printer: ${printerName}`);
-    log(`ZPL length: ${zpl.length}`);
+    const printerName = 'Citizen CL-E321';
+    const totalCopies = Math.max(1, Math.floor(copies || 1));
+    const imageDataUrls = [];
 
-    await sendRawToPrinterWindows(printerName, zpl);
+    for (let c = 0; c < totalCopies; c++) {
+      for (let i = 0; i < labelsHtml.length; i++) {
+        const pngBuffer = await htmlToPngBuffer(labelsHtml[i], 304, 200);
+        imageDataUrls.push(pngBufferToDataUrl(pngBuffer));
+      }
+    }
 
+    const driverHtml = build38x25DriverPrintHtmlFromImages(imageDataUrls);
+    log(`Generated multi-label driver HTML length=${driverHtml.length}`);
+    log(`Total labels in one print job=${imageDataUrls.length}`);
+
+    await printHtmlDirect({
+      html: driverHtml,
+      printerName,
+      pageSize: SIZES.LABEL_38x25,
+      landscape: false,
+      copies: 1,
+    });
+
+    log('Dmart print success');
     return { ok: true };
   } catch (err) {
-    log(`print:dmart-38x25 RAW error: ${err?.message || err}`);
+    log(`print:dmart-38x25 error: ${err?.message || err}`);
     return { ok: false, error: String(err?.message || err) };
   } finally {
     gentleRefocus();
@@ -616,7 +588,7 @@ app.on('before-quit', () => {
   if (serverProcess) {
     try {
       serverProcess.kill();
-    } catch {}
+    } catch { }
   }
 });
 

@@ -230,17 +230,16 @@ export class DmartComponent implements OnInit {
       const payload = this.buildJobPayload();
 
       this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => { },
+        next: () => {},
         error: (e) => console.error('Failed to log print job:', e),
       });
 
       const htmlPayload = {
-        html: this.generatePrintHTML(),
+        labelsHtml: this.printItems.map((p) => this.generateSingleLabelHTML(p)),
         copies: 1,
       };
 
       const electron = (window as any).electron;
-      console.log('window.electron =', electron);
 
       if (!electron || typeof electron.printDmart38x25 !== 'function') {
         alert('Electron print API not available.');
@@ -255,8 +254,6 @@ export class DmartComponent implements OnInit {
     } catch (e) {
       console.error('Failed to print:', e);
     }
-    console.log('window.electron =', (window as any).electron);
-    console.log('printDmart38x25 =', (window as any).electron?.printDmart38x25);
   }
 
   testPreview() {
@@ -271,12 +268,7 @@ export class DmartComponent implements OnInit {
     previewWin.document.open();
     previewWin.document.write(this.generatePrintHTML());
     previewWin.document.close();
-
-    previewWin.onload = () => {
-      this.renderBarcodesInWindow(previewWin).then(() => {
-        previewWin.focus();
-      });
-    };
+    previewWin.focus();
   }
 
   private preparePrintItems() {
@@ -294,126 +286,130 @@ export class DmartComponent implements OnInit {
   private generatePrintHTML(): string {
     const head = `
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=136px">
+      <meta name="viewport" content="width=304, initial-scale=1.0">
       <title>Dmart Label</title>
     `;
 
     const dmartStyles = `
-      @media print {
-        @page {
-          size: 38mm 25mm;
-          margin: 0mm;
-        }
-
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-
-        .print-section {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 0;
-          margin: 0;
-          padding: 0;
-        }
-      }
-
       html, body {
         margin: 0;
         padding: 0;
+        width: 304px;
+        height: 188px;
+        overflow: hidden;
+        background: #ffffff;
+      }
+
+      .print-section {
+        width: 304px;
+        height: 188px;
+        margin: 0;
+        padding: 0;
+        background: #ffffff;
+        overflow: hidden;
       }
 
       .dmart-label {
         position: relative;
-        width: 136px;
-        height: 94px;
+        width: 312px;
+        height: 196px;
         box-sizing: border-box;
-        padding: 2px 14px 1px 3px;   /* reserve space on right for Dmart */
+        padding: 4px 8px 3px 10px;
         font-family: Arial, sans-serif;
-        font-size: 9px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
         text-align: left;
-        line-height: 1.05;
+        line-height: 1.02;
         overflow: hidden;
-        page-break-inside: avoid;
-      }
-
-      .side-brand {
-        position: absolute;
-        right: 0px;
-        top: 50%;
-        width: 14px;
-        text-align: center;
-        transform: translateY(-50%) rotate(-90deg);
-        transform-origin: center;
-        font-size: 14px;
-        font-weight: bold;
-        white-space: nowrap;
-      }
-
-      .label-header {
-        font-size: 9px;
-        text-align: center;
-        width: 116px;
-        margin: 0 auto;
-        line-height: 1.05;
+        background: #ffffff;
       }
 
       .label-product {
-        font-size: 9px;
-        text-align: center;
-        width: 116px;
-        margin: 1px auto 0;
-        line-height: 1.05;
+        font-size: 18px;
+        text-align: left;
+        width: 252px;
+        margin: 1px 0 1px 0;
+        padding-left: 2px;
+        box-sizing: border-box;
+        line-height: 1.0;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
       .dmart-label img {
-        width: 116px;
-        height: 28px;
-        margin: 1px auto 0;
+        width: 225px;
+        height: 46px;
+        margin: 1px 0 1px 2px;
         display: block;
+        object-fit: fill;
       }
 
       .barcode-value {
-        font-size: 10px;
-        text-align: center;
-        width: 116px;
+        font-size: 18px;
+        text-align: left;
+        width: 252px;
         letter-spacing: 1px;
-        margin: 0 auto 1px;
+        padding-left: 2px;
+        box-sizing: border-box;
+        margin: 0 0 1px 0;
         line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       .info-row {
         display: flex;
         justify-content: space-between;
-        width: 116px;
-        font-size: 9px;
-        margin: 0 auto;
-        line-height: 1.05;
+        width: 252px;
+        font-size: 16px;
+        margin: 0;
+        padding-left: 2px;
+        box-sizing: border-box;
+        line-height: 1.0;
+        white-space: nowrap;
+        gap: 6px;
       }
 
       .info-left {
         font-weight: normal;
-        font-size: 9.5px;
-        text-align: center;
+        font-size: 16px;
+        text-align: left;
       }
 
       .price-value {
-        font-size: 9.5px;
+        font-size: 16px;
         font-weight: bold;
-        text-align: center;
+        text-align: left;
       }
 
       .label-footer {
-        font-size: 7px;
+        font-size: 12px;
         text-align: left;
-        width: 100%;
+        width: 252px;
         margin-top: 1px;
+        padding-left: 2px;
+        box-sizing: border-box;
         line-height: 1;
-        padding-bottom: 1px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .side-brand {
+        position: absolute;
+        right: 6px;
+        top: 58px;
+        transform: rotate(-90deg);
+        transform-origin: center;
+        font-size: 21px;
+        font-weight: bold;
+        line-height: 1;
+        white-space: nowrap;
+        width: 86px;
+        text-align: center;
+        z-index: 5;
       }
     `;
 
@@ -431,6 +427,14 @@ export class DmartComponent implements OnInit {
         </body>
       </html>
     `;
+  }
+
+  private generateSingleLabelHTML(item: any): string {
+    const originalItems = this.printItems;
+    this.printItems = [item];
+    const html = this.generatePrintHTML();
+    this.printItems = originalItems;
+    return html;
   }
 
   private generateDmartBody(): string {
