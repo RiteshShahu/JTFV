@@ -459,7 +459,7 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
       return { ok: false, error: 'Canon LBP2900 printer not found.' };
     }
 
-    await printHtmlViaPdfSpool({
+    await printHtmlDirect({
       html,
       printerName: deviceName,
       pageSize: SIZES.A4,
@@ -467,6 +467,7 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
       copies,
     });
 
+    log(`Canon A4 print success to printer="${deviceName}"`);
     return { ok: true };
   } catch (err) {
     log(`print:canon-a4 error: ${err?.message || err}`);
@@ -474,7 +475,7 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch { }
+    } catch {}
     gentleRefocus();
   }
 });
