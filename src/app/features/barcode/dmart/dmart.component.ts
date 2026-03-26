@@ -32,6 +32,10 @@ export class DmartComponent implements OnInit {
         this.nameOptions = names.sort((a, b) =>
           (`${a.name} ${a.units}`).localeCompare(`${b.name} ${b.units}`)
         );
+
+        this.products.forEach((p) => {
+          p.filteredOptions = [...this.nameOptions];
+        });
       },
       error: (err) => console.error('Failed to load names:', err),
     });
@@ -47,11 +51,10 @@ export class DmartComponent implements OnInit {
       this.addRow();
 
       setTimeout(() => {
-        const inputs = document.querySelectorAll(
-          `tr:nth-child(${this.products.length + 1}) select[name^='productName']`
-        );
-        if (inputs.length > 0) {
-          (inputs[0] as HTMLElement).focus();
+        const inputs = document.querySelectorAll(`input[name^='productSearch']`);
+        const lastInput = inputs[inputs.length - 1] as HTMLElement;
+        if (lastInput) {
+          lastInput.focus();
         }
       });
     }
@@ -61,6 +64,8 @@ export class DmartComponent implements OnInit {
     this.products.push({
       nameId: null,
       productName: '',
+      searchText: '',
+      filteredOptions: [...this.nameOptions],
       mrp: 0,
       category: '',
       quantity: 1,
@@ -74,12 +79,101 @@ export class DmartComponent implements OnInit {
     });
   }
 
+  displayName(option: any): string {
+    if (!option) return '';
+    return `${option.name} ${option.units}`.trim();
+  }
+
+  private normalizeText(value: string): string {
+    return (value || '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private normalizeCompact(value: string): string {
+    return this.normalizeText(value).replace(/\s+/g, '');
+  }
+
+  filterProducts(index: number) {
+    const item = this.products[index];
+    const rawSearch = item.searchText || '';
+    const search = this.normalizeText(rawSearch);
+    const compactSearch = this.normalizeCompact(rawSearch);
+
+    if (!search) {
+      item.filteredOptions = [...this.nameOptions];
+      return;
+    }
+
+    const searchWords = search.split(' ').filter(Boolean);
+
+    item.filteredOptions = this.nameOptions.filter((option) => {
+      const fullText = this.normalizeText(`${option.name} ${option.units}`);
+      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
+
+      const allWordsMatch = searchWords.every(word =>
+        fullText.includes(word) || compactText.includes(word)
+      );
+
+      return allWordsMatch || compactText.includes(compactSearch);
+    });
+  }
+
+  onOptionChosen(index: number, selected: any, event: any) {
+    if (!event?.isUserInput || !selected) return;
+
+    const product = this.products[index];
+    product.nameId = selected.id;
+    product.searchText = `${selected.name} ${selected.units}`;
+    this.applySelectedProduct(index, selected);
+  }
+
+  tryAutoSelectClosest(index: number) {
+    const item = this.products[index];
+    const rawSearch = item.searchText || '';
+    const search = this.normalizeText(rawSearch);
+    const compactSearch = this.normalizeCompact(rawSearch);
+
+    if (!search) return;
+
+    const exact = this.nameOptions.find(option =>
+      this.normalizeText(`${option.name} ${option.units}`) === search
+    );
+
+    if (exact) {
+      item.nameId = exact.id;
+      item.searchText = `${exact.name} ${exact.units}`;
+      this.applySelectedProduct(index, exact);
+      return;
+    }
+
+    const tokens = search.split(' ').filter(Boolean);
+
+    const closest = this.nameOptions.find(option => {
+      const fullText = this.normalizeText(`${option.name} ${option.units}`);
+      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
+
+      return tokens.every(token =>
+        fullText.includes(token) || compactText.includes(token)
+      ) || compactText.includes(compactSearch);
+    });
+
+    if (closest) {
+      item.nameId = closest.id;
+      item.searchText = `${closest.name} ${closest.units}`;
+      this.applySelectedProduct(index, closest);
+    }
+  }
+
   onProductIdChange(i: number, nameId: number | null) {
     const selected = this.nameOptions.find(n => n.id === nameId!);
     const product = this.products[i];
 
     if (!selected) {
       product.productName = '';
+      product.searchText = '';
       product.category = '';
       product.units = '';
       product.dbBarcode = '';
@@ -90,7 +184,16 @@ export class DmartComponent implements OnInit {
       return;
     }
 
+    product.searchText = `${selected.name} ${selected.units}`;
+    this.applySelectedProduct(i, selected);
+  }
+
+  private applySelectedProduct(i: number, selected: any) {
+    const product = this.products[i];
+
+    product.nameId = selected.id;
     product.productName = `${selected.name} ${selected.units}`;
+    product.searchText = `${selected.name} ${selected.units}`;
     product.category = selected.type
       ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
       : '';
@@ -137,6 +240,9 @@ export class DmartComponent implements OnInit {
 
   removeRow(index: number) {
     this.products.splice(index, 1);
+    if (this.products.length === 0) {
+      this.addRow();
+    }
   }
 
   updateExpiry(index: number) {
@@ -230,7 +336,7 @@ export class DmartComponent implements OnInit {
       const payload = this.buildJobPayload();
 
       this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => {},
+        next: () => { },
         error: (e) => console.error('Failed to log print job:', e),
       });
 
@@ -447,7 +553,7 @@ export class DmartComponent implements OnInit {
     };
 
     return this.printItems
-      .map((p, i) => {
+      .map((p) => {
         const pkd = formatDate(this.packedOnDate);
         const exp = formatDate(p.expiryDate);
 
@@ -535,6 +641,8 @@ export class DmartComponent implements OnInit {
         const item: any = {
           nameId: n.id,
           productName: `${n.name} ${n.units}`,
+          searchText: `${n.name} ${n.units}`,
+          filteredOptions: [...this.nameOptions],
           units: n.units,
           category,
           mrp: Number(n.mrp ?? 0),

@@ -8,14 +8,8 @@
   <div class="barcode-top-options no-print">
     <div class="packed-date-wrapper">
       <label for="packedOn" class="packed-date-label">📦 <strong>Packed On Date</strong></label>
-      <input
-        type="date"
-        id="packedOn"
-        name="packedOn"
-        class="form-control packed-date-input"
-        [(ngModel)]="packedOnDate"
-        (change)="onPackedOnChange()"
-      />
+      <input type="date" id="packedOn" name="packedOn" class="form-control packed-date-input" [(ngModel)]="packedOnDate"
+        (change)="onPackedOnChange()" />
     </div>
   </div>
 
@@ -33,48 +27,33 @@
 
       <tbody>
         <tr *ngFor="let item of products; let i = index; trackBy: trackByIndex">
-          <td>
-            <select
-              class="form-control"
-              name="productName{{ i }}"
-              [(ngModel)]="item.nameId"
-              (ngModelChange)="onProductIdChange(i, $event)"
-            >
-              <option [ngValue]="null">Select Product</option>
-              <option *ngFor="let option of nameOptions" [ngValue]="option.id">
-                {{ option.name }} {{ option.units }}
-              </option>
-            </select>
+          <td class="product-cell">
+            <mat-form-field appearance="outline" class="product-field">
+              <input matInput type="text" name="productSearch{{ i }}" [(ngModel)]="item.searchText"
+                [matAutocomplete]="auto" (input)="filterProducts(i)" (blur)="tryAutoSelectClosest(i)"
+                placeholder="Type product like Cabb 500" />
+
+              <mat-autocomplete #auto="matAutocomplete">
+                <mat-option *ngFor="let option of item.filteredOptions" [value]="displayName(option)"
+                  (onSelectionChange)="onOptionChosen(i, option, $event)">
+                  {{ option.name }} {{ option.units }}
+                </mat-option>
+              </mat-autocomplete>
+            </mat-form-field>
           </td>
 
           <td>
-            <input
-              type="number"
-              class="form-control"
-              [(ngModel)]="item.quantity"
-              name="quantity{{ i }}"
-            />
+            <input type="number" class="form-control" [(ngModel)]="item.quantity" name="quantity{{ i }}" />
           </td>
 
           <td>
-            <input
-              type="number"
-              class="form-control"
-              [(ngModel)]="item.mrp"
-              name="mrp{{ i }}"
-              (change)="onMrpChange(i)"
-              (keydown)="onMrpKeyDown($event, i)"
-            />
+            <input type="number" class="form-control" [(ngModel)]="item.mrp" name="mrp{{ i }}" (change)="onMrpChange(i)"
+              (keydown)="onMrpKeyDown($event, i)" />
           </td>
 
           <td>
-            <select
-              class="form-control"
-              [(ngModel)]="item.category"
-              name="category{{ i }}"
-              (change)="generateBarcode(item)"
-              [tabindex]="-1"
-            >
+            <select class="form-control" [(ngModel)]="item.category" name="category{{ i }}"
+              (change)="generateBarcode(item)" [tabindex]="-1">
               <option value="">Select</option>
               <option value="Fruit">Fruit</option>
               <option value="Vegetable">Vegetable</option>
@@ -82,12 +61,7 @@
           </td>
 
           <td class="no-print">
-            <button
-              type="button"
-              class="btn btn-outline-danger delete-btn"
-              (click)="removeRow(i)"
-              [tabindex]="-1"
-            >
+            <button type="button" class="btn btn-outline-danger delete-btn" (click)="removeRow(i)" [tabindex]="-1">
               Delete
             </button>
           </td>

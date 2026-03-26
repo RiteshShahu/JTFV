@@ -11,7 +11,6 @@ export type LabelStyle = 'dmart' | 'reliance' | 'old-dmart';
   templateUrl: './barcode.component.html',
   styleUrls: ['./barcode.component.css'],
 })
-
 export class BarcodeComponent implements OnInit {
   products: any[] = [];
   printItems: any[] = [];
@@ -25,7 +24,7 @@ export class BarcodeComponent implements OnInit {
     private productService: ProductService,
     private labelPrints: LabelPrintsService,
     private router: Router,
-  ) { }
+  ) {}
 
   ngOnInit(): void {
     this.addRow();
@@ -37,6 +36,10 @@ export class BarcodeComponent implements OnInit {
         this.nameOptions = names.sort((a, b) =>
           (`${a.name} ${a.units}`).localeCompare(`${b.name} ${b.units}`)
         );
+
+        this.products.forEach((p) => {
+          p.filteredOptions = [...this.filteredNameOptions];
+        });
       },
       error: (err) => console.error('Failed to load names:', err),
     });
@@ -50,12 +53,14 @@ export class BarcodeComponent implements OnInit {
     if (event.key === 'Tab' && index === this.products.length - 1) {
       event.preventDefault();
       this.addRow();
+
       setTimeout(() => {
         const inputs = document.querySelectorAll(
-          `tr:nth-child(${this.products.length + 1}) select[name^='productName']`
+          `input[name^='productSearch']`
         );
-        if (inputs.length > 0) {
-          (inputs[0] as HTMLElement).focus();
+        const lastInput = inputs[inputs.length - 1] as HTMLElement;
+        if (lastInput) {
+          lastInput.focus();
         }
       });
     }
@@ -65,6 +70,8 @@ export class BarcodeComponent implements OnInit {
     this.products.push({
       nameId: null,
       productName: '',
+      searchText: '',
+      filteredOptions: [...this.filteredNameOptions],
       mrp: 0,
       category: '',
       quantity: 1,
@@ -74,7 +81,96 @@ export class BarcodeComponent implements OnInit {
       dbBarcode: '',
       mrpEdited: false,
       expiryEdited: false,
+      units: '',
     });
+  }
+
+  displayName(option: any): string {
+    if (!option) return '';
+    return `${option.name} ${option.units}`.trim();
+  }
+
+  private normalizeText(value: string): string {
+    return (value || '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private normalizeCompact(value: string): string {
+    return this.normalizeText(value).replace(/\s+/g, '');
+  }
+
+  filterProducts(index: number) {
+    const item = this.products[index];
+    const rawSearch = item.searchText || '';
+    const search = this.normalizeText(rawSearch);
+    const compactSearch = this.normalizeCompact(rawSearch);
+
+    if (!search) {
+      item.filteredOptions = [...this.filteredNameOptions];
+      return;
+    }
+
+    const searchWords = search.split(' ').filter(Boolean);
+
+    item.filteredOptions = this.filteredNameOptions.filter((option) => {
+      const fullText = this.normalizeText(`${option.name} ${option.units}`);
+      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
+
+      const allWordsMatch = searchWords.every(word =>
+        fullText.includes(word) || compactText.includes(word)
+      );
+
+      return allWordsMatch || compactText.includes(compactSearch);
+    });
+  }
+
+  onOptionChosen(index: number, selected: any, event: any) {
+    if (!event?.isUserInput || !selected) return;
+
+    const product = this.products[index];
+    product.nameId = selected.id;
+    product.searchText = `${selected.name} ${selected.units}`;
+    this.applySelectedProduct(index, selected);
+  }
+
+  tryAutoSelectClosest(index: number) {
+    const item = this.products[index];
+    const rawSearch = item.searchText || '';
+    const search = this.normalizeText(rawSearch);
+    const compactSearch = this.normalizeCompact(rawSearch);
+
+    if (!search) return;
+
+    const exact = this.filteredNameOptions.find(option =>
+      this.normalizeText(`${option.name} ${option.units}`) === search
+    );
+
+    if (exact) {
+      item.nameId = exact.id;
+      item.searchText = `${exact.name} ${exact.units}`;
+      this.applySelectedProduct(index, exact);
+      return;
+    }
+
+    const tokens = search.split(' ').filter(Boolean);
+
+    const closest = this.filteredNameOptions.find(option => {
+      const fullText = this.normalizeText(`${option.name} ${option.units}`);
+      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
+
+      return tokens.every(token =>
+        fullText.includes(token) || compactText.includes(token)
+      ) || compactText.includes(compactSearch);
+    });
+
+    if (closest) {
+      item.nameId = closest.id;
+      item.searchText = `${closest.name} ${closest.units}`;
+      this.applySelectedProduct(index, closest);
+    }
   }
 
   onProductIdChange(i: number, nameId: number | null) {
@@ -82,8 +178,8 @@ export class BarcodeComponent implements OnInit {
     const product = this.products[i];
 
     if (!selected) {
-      // clear row
       product.productName = '';
+      product.searchText = '';
       product.category = '';
       product.units = '';
       product.dbBarcode = '';
@@ -94,7 +190,26 @@ export class BarcodeComponent implements OnInit {
       return;
     }
 
+    product.searchText = `${selected.name} ${selected.units}`;
+    this.applySelectedProduct(i, selected);
+  }
+
+  onMrpChange(index: number) {
+    this.products[index].mrpEdited = true;
+    this.generateBarcode(this.products[index]);
+  }
+
+  onExpiryChange(index: number) {
+    this.products[index].expiryEdited = true;
+    this.updateExpiry(index);
+  }
+
+  private applySelectedProduct(i: number, selected: any) {
+    const product = this.products[i];
+
+    product.nameId = selected.id;
     product.productName = `${selected.name} ${selected.units}`;
+    product.searchText = `${selected.name} ${selected.units}`;
     product.category = selected.type
       ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
       : '';
@@ -114,16 +229,6 @@ export class BarcodeComponent implements OnInit {
     this.generateBarcode(product);
   }
 
-  onMrpChange(index: number) {
-    this.products[index].mrpEdited = true;
-    this.generateBarcode(this.products[index]);
-  }
-
-  onExpiryChange(index: number) {
-    this.products[index].expiryEdited = true;
-    this.updateExpiry(index);
-  }
-
   private getTodayLocalDate(): string {
     const today = new Date();
     const year = today.getFullYear();
@@ -135,12 +240,15 @@ export class BarcodeComponent implements OnInit {
   resetForm() {
     this.packedOnDate = this.getTodayLocalDate();
     this.products = [];
-    this.addRow();               // row starts with nameId = null
-    this.cdRef.detectChanges();  // (optional) nudge change detection
+    this.addRow();
+    this.cdRef.detectChanges();
   }
 
   removeRow(index: number) {
     this.products.splice(index, 1);
+    if (this.products.length === 0) {
+      this.addRow();
+    }
   }
 
   updateExpiry(index: number) {
@@ -176,6 +284,7 @@ export class BarcodeComponent implements OnInit {
     if (selected) {
       const product = this.products[i];
       product.productName = `${selected.name} ${selected.units}`;
+      product.searchText = `${selected.name} ${selected.units}`;
       product.category = selected.type
         ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
         : '';
@@ -232,20 +341,17 @@ export class BarcodeComponent implements OnInit {
     return {
       packedOnDate: this.packedOnDate,
       printStyle: this.selectedPrintStyle,
-      // clientName: 'Reliance Retail Limited', // optional for future
       items,
     };
   }
 
-  // 🚀 Direct printing without preview
   printSelected() {
     this.preparePrintItems();
 
-    // 🔐 Log the print job (non-blocking; does not affect printing)
     try {
       const payload = this.buildJobPayload();
       this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => { },
+        next: () => {},
         error: (e) => console.error('Failed to log print job:', e),
       });
     } catch (e) {
@@ -280,7 +386,6 @@ export class BarcodeComponent implements OnInit {
     };
   }
 
-  // 🧪 Testing: open preview in a NEW window (no printing)
   testPreview() {
     this.preparePrintItems();
 
@@ -294,11 +399,9 @@ export class BarcodeComponent implements OnInit {
     previewWin.document.write(this.generatePrintHTML());
     previewWin.document.close();
 
-    // Wait until the DOM is ready, then render barcodes into the preview window
     previewWin.onload = () => {
       this.renderBarcodesInWindow(previewWin).then(() => {
         previewWin.focus();
-        // ✅ NO print() here
       });
     };
   }
@@ -442,7 +545,7 @@ export class BarcodeComponent implements OnInit {
         .dmart-label {
           position: relative;
           width: 136px;
-          height: 94px; /* increased from 92px to give room for footer */
+          height: 94px;
           box-sizing: border-box;
           padding: 2px 3px 1px;
           font-family: Arial, sans-serif;
@@ -452,7 +555,7 @@ export class BarcodeComponent implements OnInit {
           justify-content: flex-start;
           text-align: left;
           line-height: 1.05;
-          overflow: hidden.
+          overflow: hidden;
         }
 
         .label-header {
@@ -502,7 +605,7 @@ export class BarcodeComponent implements OnInit {
         .price-value {
           font-size: 9.5px;
           font-weight: bold;
-          text-align: center.
+          text-align: center;
         }
 
         .label-footer {
@@ -510,8 +613,8 @@ export class BarcodeComponent implements OnInit {
           text-align: left;
           width: 100%;
           margin-top: 1px;
-          line-height: 1;         /* ensure compact */
-          padding-bottom: 1px;    /* give slight breathing room */
+          line-height: 1;
+          padding-bottom: 1px;
         }
 
         .side-brand {
@@ -558,7 +661,7 @@ export class BarcodeComponent implements OnInit {
           line-height: 1.2;
           text-align: left;
           page-break-inside: avoid;
-          border: 1px solid transparent; /* optional: helps with visual debugging */
+          border: 1px solid transparent;
         }
 
         .reliance-label canvas {
@@ -602,6 +705,7 @@ export class BarcodeComponent implements OnInit {
 
     let css = '';
     let body = '';
+
     switch (this.selectedPrintStyle) {
       case 'dmart':
         css = dmartStyles;
@@ -715,7 +819,7 @@ export class BarcodeComponent implements OnInit {
     const promises: Promise<void>[] = [];
 
     this.printItems.forEach((p, i) => {
-      let imgId = this.selectedPrintStyle === 'reliance'
+      const imgId = this.selectedPrintStyle === 'reliance'
         ? `rel-barcode-img-${i}`
         : `dmart-bar-${i}`;
 
@@ -733,6 +837,7 @@ export class BarcodeComponent implements OnInit {
           textxalign: 'center',
           backgroundcolor: 'FFFFFF',
         });
+
         const dataUrl = canvas.toDataURL('image/png');
 
         const loadPromise = new Promise<void>((resolve, reject) => {
@@ -758,33 +863,37 @@ export class BarcodeComponent implements OnInit {
         const match = this.nameOptions.find(
           (n) => `${n.name} ${n.units}` === p.productName
         );
+
         if (!match || match.type?.toLowerCase() !== 'vegetable') {
+          p.nameId = null;
           p.productName = '';
+          p.searchText = '';
           p.category = '';
           p.barcode = '';
           p.dbBarcode = '';
+          p.units = '';
         }
       });
     }
 
-    this.products.forEach((p) => this.generateBarcode(p));
+    this.products.forEach((p) => {
+      p.filteredOptions = [...this.filteredNameOptions];
+      this.generateBarcode(p);
+    });
+
     this.cdRef.detectChanges();
   }
 
-  // 🧪 Print ALL barcodes at once (testing)
   printAllBarcodesTest() {
-    // Ensure names are loaded
     if (!this.nameOptions || this.nameOptions.length === 0) {
       alert('Names not loaded yet. Please wait a moment.');
       return;
     }
 
-    // Choose list according to style (Reliance = vegetables only per your getter)
     const list = this.selectedPrintStyle === 'reliance'
       ? this.nameOptions.filter(n => n.type?.toLowerCase() === 'vegetable')
       : this.nameOptions;
 
-    // Build printItems directly (quantity = 1 each for test)
     this.printItems = list
       .map((n) => {
         const category = n.type
@@ -800,6 +909,7 @@ export class BarcodeComponent implements OnInit {
         const item: any = {
           nameId: n.id,
           productName: `${n.name} ${n.units}`,
+          searchText: `${n.name} ${n.units}`,
           units: n.units,
           category,
           mrp: Number(n.mrp ?? 0),
@@ -810,12 +920,9 @@ export class BarcodeComponent implements OnInit {
           barcode: '',
         };
 
-        // Generates barcode based on your current style rules
         this.generateBarcode(item);
-
         return item;
       })
-      // keep only valid printable items
       .filter(p => p.productName && p.mrp > 0 && p.barcode);
 
     if (this.printItems.length === 0) {
@@ -823,7 +930,6 @@ export class BarcodeComponent implements OnInit {
       return;
     }
 
-    // Reuse the SAME print flow you already have
     const iframe = document.createElement('iframe');
     iframe.style.position = 'fixed';
     iframe.style.right = '0';

@@ -5,15 +5,16 @@ import { AppComponent } from './app.component';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatCardModule } from '@angular/material/card';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatIconModule } from '@angular/material/icon';
-import { ReactiveFormsModule } from '@angular/forms';
+
 import { LoginComponent } from './features/login/login.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { AddMerchantComponent } from './features/dashboard/add-merchant/add-merchant.component';
@@ -35,7 +36,6 @@ import { PriceChangeComponent } from './features/price-change/price-change.compo
 import { ToastContainerComponent } from './features/toast-container/toast-container.component';
 import { DmartComponent } from './features/barcode/dmart/dmart.component';
 
-
 @NgModule({
   imports: [
     BrowserModule,
@@ -51,9 +51,10 @@ import { DmartComponent } from './features/barcode/dmart/dmart.component';
     MatIconModule,
     MatInputModule,
     MatFormFieldModule,
-    MatCardModule
+    MatCardModule,
+    MatAutocompleteModule
   ],
-  
+
   declarations: [
     AppComponent,
     LoginComponent,
