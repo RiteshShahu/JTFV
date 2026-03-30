@@ -14,9 +14,7 @@
     </div>
   </div>
 
-  <!-- Parties / Details block -->
   <div class="tax-parties">
-    <!-- Bill To -->
     <div class="party">
       <div class="party-title">Bill To</div>
       <div class="party-name">{{ clientName || 'Reliance Retail Limited' }}</div>
@@ -25,7 +23,6 @@
       </div>
     </div>
 
-    <!-- Ship To -->
     <div class="party">
       <div class="party-title">Ship To</div>
       <div class="party-name">{{ shipToName || 'FRESHPIK SPECTRA POWAI ( T5EP )' }}</div>
@@ -49,7 +46,6 @@
     </div>
   </div>
 
-  <!-- Items table -->
   <table class="table">
     <thead>
       <tr>
@@ -60,36 +56,43 @@
         <th>Item Price</th>
       </tr>
     </thead>
+
     <tbody>
       <tr *ngFor="let item of billItems; let i = index">
         <td>{{ i + 1 }}</td>
-        <td>
-          <select #productSelect class="product-control"
-                  [(ngModel)]="item.productId"
-                  (change)="onProductChange(i)">
-            <option [ngValue]="null" disabled>Select</option>
-            <option *ngFor="let product of products" [ngValue]="product.id">
-              {{ product.name }}{{ product.units ? ' ' + product.units : '' }}
-            </option>
-          </select>
+
+        <td class="product-cell">
+          <mat-form-field appearance="outline" class="product-field">
+            <input #productSearchInput matInput type="text" name="productSearch{{ i }}" [(ngModel)]="item.searchText"
+              [matAutocomplete]="auto" (input)="filterProducts(i)" (blur)="tryAutoSelectClosest(i)"
+              placeholder="Type product like Cabb 500" />
+
+            <mat-autocomplete #auto="matAutocomplete">
+              <mat-option *ngFor="let product of item.filteredProducts" [value]="displayProductOption(product)"
+                (onSelectionChange)="onProductOptionSelected(i, product, $event)">
+                {{ product.name }}{{ product.units ? ' ' + product.units : '' }}
+              </mat-option>
+            </mat-autocomplete>
+          </mat-form-field>
         </td>
+
         <td>
-          <input #qtyInput class="form-control" type="number"
-                [(ngModel)]="item.quantity"
-                (input)="calculateRowTotal(i)" />
+          <input #qtyInput class="form-control" type="number" [(ngModel)]="item.quantity"
+            (input)="calculateRowTotal(i)" />
         </td>
+
         <td>
-          <input class="form-control" type="number" step="0.01"
-                [(ngModel)]="item.total" (input)="onSalesAmountInput(i)" />
+          <input class="form-control" type="number" step="0.01" [(ngModel)]="item.total"
+            (input)="onSalesAmountInput(i)" />
         </td>
+
         <td>
-          <input #priceInput class="form-control" type="number"
-                [(ngModel)]="item.price"
-                (input)="calculateRowTotal(i)"
-                (keydown)="onPriceKeydown($event, i)" />
+          <input #priceInput class="form-control" type="number" [(ngModel)]="item.price" (input)="calculateRowTotal(i)"
+            (keydown)="onPriceKeydown($event, i)" />
         </td>
       </tr>
     </tbody>
+
     <tfoot>
       <tr class="total-row">
         <td colspan="2" class="left"><strong>Total</strong></td>
@@ -100,9 +103,7 @@
     </tfoot>
   </table>
 
-  <!-- Amounts + Words in two-column layout -->
   <div class="boxes compact">
-    <!-- Left column: Invoice Amount + Terms -->
     <div class="left-column">
       <div class="box">
         <div class="box-title">Invoice Amount In Words</div>
@@ -117,15 +118,18 @@
       </div>
     </div>
 
-    <!-- Right column: Amounts -->
     <div class="box amounts-box">
       <div class="box-title">Amounts</div>
       <div class="amount-grid">
-        <div>Sub Total</div><div class="v">₹ {{ totalAmount | number:'1.2-2' }}</div>
-        <div><strong>Total</strong></div><div class="v"><strong>₹ {{ totalAmount | number:'1.2-2' }}</strong></div>
+        <div>Sub Total</div>
+        <div class="v">₹ {{ totalAmount | number:'1.2-2' }}</div>
+        <div><strong>Total</strong></div>
+        <div class="v"><strong>₹ {{ totalAmount | number:'1.2-2' }}</strong></div>
         <div>Received</div>
         <div class="v">
-          ₹ <input type="number" [(ngModel)]="receivedAmount" (input)="balanceAmount = totalAmount - (receivedAmount || 0)" style="border:none;outline:none;width:80px;" />
+          ₹ <input type="number" [(ngModel)]="receivedAmount"
+            (input)="balanceAmount = totalAmount - (receivedAmount || 0)"
+            style="border:none;outline:none;width:80px;" />
         </div>
         <div>Balance</div>
         <div class="v">₹ {{ balanceAmount | number:'1.2-2' }}</div>
@@ -135,11 +139,12 @@
 
   <div>
     <label style="margin: 0 8px 0 16px; font-weight: bold;">Copies:</label>
-    <input type="number" [(ngModel)]="copiesCount" min="1" max="50" step="1" class="form-control" style="width: 50px; display: inline-block; margin-right: 10px;" />
-    <small style="margin-left:8px;color:#666;"> Sunil17.Singh@ril.com, Vijendra.Anthwal@ril.com, niraj.shinde@ril.com </small>
+    <input type="number" [(ngModel)]="copiesCount" min="1" max="50" step="1" class="form-control"
+      style="width: 50px; display: inline-block; margin-right: 10px;" />
+    <small style="margin-left:8px;color:#666;"> Sunil17.Singh@ril.com, Vijendra.Anthwal@ril.com, niraj.shinde@ril.com
+    </small>
   </div>
-  
-  <!-- Actions -->
+
   <div class="actions">
     <button class="btn btn-success" (click)="saveBill()">Save</button>
     <button class="btn btn-primary" (click)="printBill()">Print</button>

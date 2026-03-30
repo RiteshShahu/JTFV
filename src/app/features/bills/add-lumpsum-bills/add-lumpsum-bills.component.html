@@ -23,7 +23,8 @@
       <div class="line">
         <label>Name :</label>
         <span class="print-toggle">
-          <select class="form-control client-select no-print" [(ngModel)]="selectedClient" (change)="onClientChange()" tabindex="1" >
+          <select class="form-control client-select no-print" [(ngModel)]="selectedClient" (change)="onClientChange()"
+            tabindex="1">
             <option [ngValue]="null">Select Client</option>
             <option *ngFor="let client of clients" [ngValue]="client">
               {{ client.firstName }}
@@ -36,7 +37,8 @@
       <div class="line">
         <label>Address :</label>
         <span class="print-toggle">
-          <textarea class="form-control address-area no-print" [(ngModel)]="address" (input)="autoResize($event)" #addressBox tabindex="-1" ></textarea>
+          <textarea class="form-control address-area no-print" [(ngModel)]="address" (input)="autoResize($event)"
+            #addressBox tabindex="-1"></textarea>
           <span class="print-view" style="white-space: pre-line;">{{ address }}</span>
         </span>
       </div>
@@ -53,7 +55,8 @@
       <div class="meta">
         <label>Bill No :</label>
         <span class="print-toggle">
-          <input type="text" class="form-control bill-control no-print" [(ngModel)]="billNumber" readonly tabindex="-1" />
+          <input type="text" class="form-control bill-control no-print" [(ngModel)]="billNumber" readonly
+            tabindex="-1" />
           <span class="print-view">{{ billNumber }}</span>
         </span>
       </div>
@@ -69,7 +72,8 @@
       <div class="meta">
         <label>Amount :</label>
         <span class="print-toggle">
-          <input type="number" class="form-control no-print" [(ngModel)]="amount" (input)="calculateFinalAmount()" tabindex="2" />
+          <input type="number" class="form-control no-print" [(ngModel)]="amount" (input)="calculateFinalAmount()"
+            tabindex="2" />
           <span class="print-view">{{ amount | number:'1.2-2' }}</span>
         </span>
       </div>
@@ -78,8 +82,8 @@
 
   <!-- Description (unchanged) -->
   <div class="print-toggle print-value description-container">
-    <textarea [(ngModel)]="description" class="form-control no-print" rows="6" style="width: 100%; margin-bottom: 20px;" tabindex="3"
-    ></textarea>
+    <textarea [(ngModel)]="description" class="form-control no-print" rows="6" style="width: 100%; margin-bottom: 20px;"
+      tabindex="3"></textarea>
     <div class="description-print print-view">{{ description }}</div>
   </div>
 
@@ -93,7 +97,8 @@
     <div class="summary print-toggle">
       <label>Discount :</label>
       <div class="discount-line">
-        <input class="form-control no-print" type="number" [(ngModel)]="discount" (input)="calculateFinalAmount()" style="width: 70px" tabindex="4" /> 
+        <input class="form-control no-print" type="number" [(ngModel)]="discount" (input)="calculateFinalAmount()"
+          style="width: 70px" tabindex="4" />
         <span class="no-print">%</span>
         <span class="print-view">{{ discount }} %</span>
         <span class="margin-value">{{ marginValue | number:'1.2-2' }}</span>
@@ -104,22 +109,19 @@
       <label>Grand Total :</label>
       <div>{{ finalAmount | number:'1.2-2' }}</div>
     </div>
-    
+
     <label style="margin: 0 8px 0 16px; font-weight: bold;">Copies:</label>
-    <input type="number"
-          [(ngModel)]="copiesCount"
-          min="1" max="50" step="1"
-          class="form-control"
-          style="width: 50px; display: inline-block; margin-right: 10px;"
-          tabindex="5" />
+    <input type="number" [(ngModel)]="copiesCount" min="1" max="50" step="1" class="form-control"
+      style="width: 50px; display: inline-block; margin-right: 10px;" tabindex="5" />
   </div>
 
   <!-- Actions -->
   <div class="actions no-print">
     <button class="btn btn-success" (click)="saveBill()">Save</button>
     <button class="btn btn-primary" (click)="printBill()">Print</button>
+    <button class="btn btn-warning" (click)="printChallan()">Print Challan</button>
     <input type="email" [(ngModel)]="manualEmail" class="form-control" placeholder="Enter email"
-          style="width: 250px; display: inline-block; margin-right: 10px;" />
+      style="width: 250px; display: inline-block; margin-right: 10px;" />
     <button class="btn btn-secondary" (click)="emailBill()">Email</button>
   </div>
 </div>

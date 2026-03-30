@@ -34,14 +34,15 @@
   text-align: center;
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: .3px;
+  letter-spacing: 0.5px;
   margin: 14px 0 10px;
 }
 
 /* === TWO-COLUMN ROW: LEFT(Name/Address) | RIGHT(Bill No/Date/Amount) === */
 .info-grid {
   display: grid;
-  grid-template-columns: 1fr 320px;   /* left grows, right fixed */
+  grid-template-columns: 1fr 320px;
+  /* left grows, right fixed */
   align-items: start;
   gap: 16px 24px;
   margin-bottom: 12px;
@@ -59,7 +60,8 @@
 .gst-no {
   font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
   font-size: 16px;
-  letter-spacing: 1px; /* spacing makes each digit clearer */
+  letter-spacing: 1px;
+  /* spacing makes each digit clearer */
 }
 
 .left-info label {
@@ -91,13 +93,21 @@
   background: #f7f9fc;
 }
 
-.bill-control { width: 80px; text-align: center; }
-select.form-control.client-select { min-width: 250px; }
+.bill-control {
+  width: 80px;
+  text-align: center;
+}
+
+select.form-control.client-select {
+  min-width: 250px;
+}
 
 textarea.form-control.address-area {
-  width: 280px;        /* 👈 decrease width (adjust as needed) */
+  width: 280px;
+  /* 👈 decrease width (adjust as needed) */
   resize: horizontal;
-  min-height: 40px;    /* slightly taller for readability */
+  min-height: 40px;
+  /* slightly taller for readability */
   line-height: 1.35;
 }
 
@@ -167,7 +177,8 @@ textarea.form-control.address-area {
   border-radius: 4px;
   background: #f7f9fc;
   transition: border-color 0.3s ease;
-  width: 140px;   /* fixed size for neatness */
+  width: 140px;
+  /* fixed size for neatness */
 }
 
 .right-meta input:focus {
@@ -194,29 +205,73 @@ textarea.form-control.address-area {
   transition: all 0.3s ease;
 }
 
-.btn-success { background-color: #28a745; color: #fff; }
-.btn-success:hover { background-color: #218838; }
+.btn-success {
+  background-color: #28a745;
+  color: #fff;
+}
 
-.btn-primary { background-color: #3f51b5; color: #fff; }
-.btn-primary:hover { background-color: #2c3c8f; }
+.btn-success:hover {
+  background-color: #218838;
+}
 
-.btn-secondary { background-color: #607d8b; color: #fff; }
-.btn-secondary:hover { background-color: #546e7a; }
+.btn-primary {
+  background-color: #3f51b5;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background-color: #2c3c8f;
+}
+
+.btn-secondary {
+  background-color: #607d8b;
+  color: #fff;
+}
+
+.btn-secondary:hover {
+  background-color: #546e7a;
+}
+
+.btn-warning {
+  background-color: #ff9800;
+  color: #fff;
+}
+
+.btn-warning:hover {
+  background-color: #e68900;
+}
 
 /* === PRINT TOGGLE === */
-.print-toggle .print-view { display: none; }
+.print-toggle .print-view {
+  display: none;
+}
 
 @media print {
-  .no-print { display: none !important; }
-  .print-toggle .no-print { display: none !important; }
-  .print-toggle .print-view { display: inline !important; }
+  .no-print {
+    display: none !important;
+  }
+
+  .print-toggle .no-print {
+    display: none !important;
+  }
+
+  .print-toggle .print-view {
+    display: inline !important;
+  }
 }
 
 /* Optional: small screens */
 @media (max-width: 720px) {
   .info-grid {
-    grid-template-columns: 1fr; /* stack on mobile */
+    grid-template-columns: 1fr;
+    /* stack on mobile */
   }
-  .right-meta { text-align: left; }
-  .right-meta .meta { justify-content: flex-start; }
+
+  .right-meta {
+    text-align: left;
+  }
+
+  .right-meta .meta {
+    justify-content: flex-start;
+  }
 }

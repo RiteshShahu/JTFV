@@ -34,7 +34,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
     private billsService: BillsService,
     private titleService: Title,
     private toast: ToastService
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.titleService.setTitle('Add Lumpsum Bill');
@@ -144,6 +144,14 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
 
   // --- PRINT: supports multiple copies and unfrozen UI after print ---
   async printBill(): Promise<void> {
+    await this.printDocument('invoice');
+  }
+
+  async printChallan(): Promise<void> {
+    await this.printDocument('challan');
+  }
+
+  private async printDocument(mode: 'invoice' | 'challan'): Promise<void> {
     if (this.isPrinting) return;
 
     this.isPrinting = true;
@@ -152,7 +160,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
       if (!this.clientName && !this.address && !this.description && !this.amount) {
-        this.toast.warn('Nothing to print. Please fill bill details.');
+        this.toast.warn(mode === 'challan' ? 'Nothing to print.' : 'Nothing to print. Please fill bill details.');
         return;
       }
 
@@ -160,6 +168,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       this.calculateFinalAmount();
 
       const html = this.buildPrintHtml({
+        mode,
         clientName: this.clientName || '',
         address: this.address || '',
         billNumber: this.billNumber || '',
@@ -167,7 +176,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
         description: this.description || '',
         amount: this.amount || 0,
         discount: this.discount || 0,
-        finalAmount: this.finalAmount
+        finalAmount: this.finalAmount || 0
       });
 
       const dataUrl = this.htmlToDataUrl(html);
@@ -179,7 +188,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
           console.error('Print failed:', res?.error);
           this.toast.error('Print failed. Check printer and try again.');
         } else {
-          this.toast.success('Sent to printer.');
+          this.toast.success(mode === 'challan' ? 'Challan printed.' : 'Sent to printer.');
         }
       } else {
         await this.printHtmlInHiddenIframe(html);
@@ -187,20 +196,21 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       }
     } catch (err) {
       console.error('Print failed:', err);
-      this.toast.error('Unexpected print error.');
+      this.toast.error(mode === 'challan' ? 'Error printing challan.' : 'Unexpected print error.');
     } finally {
       this.isPrinting = false;
 
       setTimeout(() => {
-        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
-        try { window.focus(); } catch {}
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { }
+        try { window.focus(); } catch { }
       }, 40);
 
-      try { (window as any).electron?.refocusHard?.(); } catch {}
+      try { (window as any).electron?.refocusHard?.(); } catch { }
     }
   }
 
   private buildPrintHtml(meta: {
+    mode: 'invoice' | 'challan';
     clientName: string;
     address: string;
     billNumber: string;
@@ -217,109 +227,218 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         .format(isFinite(n as number) ? Number(n) : 0);
 
+    const isChallan = meta.mode === 'challan';
     const dateStr = this.formatDateDDMMYYYY(meta.billDate);
     const totalAmount = Number(meta.amount) || 0;
     const discountPct = Number(meta.discount) || 0;
     const discountValue = (totalAmount * discountPct) / 100;
-    const grandTotal = (isFinite(meta.finalAmount) ? Number(meta.finalAmount) : totalAmount - discountValue);
+    const grandTotal =
+      isFinite(meta.finalAmount) ? Number(meta.finalAmount) : totalAmount - discountValue;
 
     const styles = `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        body { margin: 0; }
-        .page {
-          max-width: 950px;
-          margin: 0 auto;
-          padding: 40px;
-          font-family: 'Poppins','Segoe UI',Tahoma,sans-serif;
-          background: #ffffff;
-          color: #2c3e50;
-          page-break-after: auto; /* 👈 changed from 'always' */
-        }
-        .top-section { text-align: center; margin-bottom: 12px; }
-        .title { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 6px; }
-        .address-line,.license-line,.email-line { font-size: 13px; color: #546e7a; margin: 2px 0; }
-        .invoice-title { text-align: center; font-size: 18px; font-weight: 700; letter-spacing: .3px; margin: 14px 0 10px; }
+    <style>
+      @page { size: A4; margin: 10mm; }
+      html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body { margin: 0; }
 
-        .info-grid {
-          display: grid;
-          grid-template-columns: 1.2fr 0.8fr;
-          align-items: start;
-          gap: 16px 24px;
-          margin-bottom: 16px;
-          font-size: 14px;
-        }
-        .left-info .line { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 8px; }
-        .gst-no {
-          font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
-          font-size: 16px; letter-spacing: 1px;
-        }
-        .left-info label { font-weight: 700; white-space: nowrap; }
+      .page {
+        max-width: 950px;
+        margin: 0 auto;
+        padding: 40px;
+        font-family: 'Poppins','Segoe UI',Tahoma,sans-serif;
+        background: #ffffff;
+        color: #2c3e50;
+        page-break-after: auto;
+      }
 
-        .right-meta .meta { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .right-meta label { font-weight: 700; white-space: nowrap; min-width: 80px; text-align: right; }
+      .top-section { text-align: center; margin-bottom: 12px; }
+      .title { font-size: 28px; font-weight: bold; color: #333; margin-bottom: 6px; }
+      .address-line, .license-line, .email-line {
+        font-size: 13px;
+        color: #546e7a;
+        margin: 2px 0;
+      }
 
-        .description-container { text-align: center; margin: 16px 0 22px; }
-        .description-print {
-          display: inline-block; margin: 0 auto; padding: 8px 14px; border: 1px solid #d8d8d8;
-          border-radius: 6px; background: #f5f5f5; font-size: 14px; font-weight: 600; line-height: 1.45;
-          max-width: 85%; white-space: pre-line; word-break: break-word; text-align: center; color: #2c3e50;
-        }
+      .invoice-title {
+        text-align: center;
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: .3px;
+        margin: 14px 0 10px;
+      }
 
-        .print-summary-footer { margin-top: 30px; border-top: 1px solid #e0e0e0; padding-top: 20px; font-size: 15px; }
-        .summary { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 10px; }
-        .summary label { font-weight: 600; min-width: 150px; text-align: right; }
-        .discount-line { display: inline-flex; gap: 10px; align-items: baseline; }
-        .highlight-value { background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-weight: 600; color: #2c3e50; }
+      .info-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        align-items: start;
+        gap: 16px 24px;
+        margin-bottom: 16px;
+        font-size: 14px;
+      }
 
-        .print-toggle input, .print-toggle textarea, .print-toggle select { display: none !important; }
-        .print-toggle .print-view { display: inline !important; }
-      </style>`;
+      .left-info .line {
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+        margin-bottom: 8px;
+      }
+
+      .gst-no {
+        font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
+        font-size: 16px;
+        letter-spacing: 1px;
+      }
+
+      .left-info label {
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .right-meta .meta {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .right-meta label {
+        font-weight: 700;
+        white-space: nowrap;
+        min-width: 80px;
+        text-align: right;
+      }
+
+      .description-container {
+        text-align: center;
+        margin: 16px 0 22px;
+      }
+
+      .description-print {
+        display: inline-block;
+        margin: 0 auto;
+        padding: 8px 14px;
+        border: 1px solid #d8d8d8;
+        border-radius: 6px;
+        background: #f5f5f5;
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.45;
+        max-width: 85%;
+        white-space: pre-line;
+        word-break: break-word;
+        text-align: center;
+        color: #2c3e50;
+      }
+
+      .print-summary-footer {
+        margin-top: 30px;
+        border-top: 1px solid #e0e0e0;
+        padding-top: 20px;
+        font-size: 15px;
+      }
+
+      .summary {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+
+      .summary label {
+        font-weight: 600;
+        min-width: 150px;
+        text-align: right;
+      }
+
+      .discount-line {
+        display: inline-flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .highlight-value {
+        background: #f5f5f5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        color: #2c3e50;
+      }
+
+      .challan-mode .invoice-title,
+      .challan-mode .gst-line,
+      .challan-mode .billno-meta,
+      .challan-mode .amount-meta,
+      .challan-mode .print-summary-footer {
+        display: none !important;
+      }
+
+      .print-toggle input,
+      .print-toggle textarea,
+      .print-toggle select {
+        display: none !important;
+      }
+
+      .print-toggle .print-view {
+        display: inline !important;
+      }
+    </style>`;
 
     const onePage = `
-      <div class="page">
-        <div class="top-section">
-          <h2 class="title">J.T. Fruits &amp; Vegetables</h2>
-          <div class="address-line">Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</div>
-          <div class="license-line">PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</div>
-          <div class="email-line">Email: jkumarshahu5@gmail.com</div>
+    <div class="page ${isChallan ? 'challan-mode' : ''}">
+      <div class="top-section">
+        <h2 class="title">J.T. Fruits &amp; Vegetables</h2>
+        <div class="address-line">Shop No. 31-32, Bldg No. 27, EMP Op Jogers Park, Thakur Village, Kandivali(E), Mumbai 400101</div>
+        <div class="license-line">PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</div>
+        <div class="email-line">Email: jkumarshahu5@gmail.com</div>
+      </div>
+
+      <h3 class="invoice-title">TAX FREE INVOICE</h3>
+
+      <div class="info-grid">
+        <div class="left-info">
+          <div class="line"><label>NAME :</label><span>${esc(meta.clientName)}</span></div>
+          <div class="line"><label>ADDRESS :</label><span style="white-space: pre-line;">${esc(meta.address)}</span></div>
+          <div class="line gst-line"><label>GST No :</label><span class="gst-no">27AACCA8432H1ZQ</span></div>
         </div>
 
-        <h3 class="invoice-title">TAX FREE INVOICE</h3>
+        <div class="right-meta">
+          <div class="meta billno-meta"><label>BILL NO :</label><span>${esc(meta.billNumber)}</span></div>
+          <div class="meta"><label>DATE :</label><span>${esc(dateStr)}</span></div>
+          <div class="meta amount-meta"><label>AMOUNT :</label><span>${fmt(totalAmount)}</span></div>
+        </div>
+      </div>
 
-        <div class="info-grid">
-          <div class="left-info">
-            <div class="line"><label>NAME :</label><span>${esc(meta.clientName)}</span></div>
-            <div class="line"><label>ADDRESS :</label><span style="white-space: pre-line;">${esc(meta.address)}</span></div>
-            <div class="line"><label>GST No :</label><span class="gst-no">27AACCA8432H1ZQ</span></div>
+      <div class="description-container">
+        <div class="description-print">${esc(meta.description)}</div>
+      </div>
+
+      <div class="print-summary-footer">
+        <div class="summary"><label>Total Amount :</label><div>${fmt(totalAmount)}</div></div>
+        <div class="summary">
+          <label>Discount :</label>
+          <div class="discount-line">
+            <span class="highlight-value">${fmt(discountPct)} %</span>
+            <span>${fmt(discountValue)}</span>
           </div>
-
-          <div class="right-meta">
-            <div class="meta"><label>BILL NO :</label><span>${esc(meta.billNumber)}</span></div>
-            <div class="meta"><label>DATE :</label><span>${esc(dateStr)}</span></div>
-            <div class="meta"><label>AMOUNT :</label><span>${fmt(totalAmount)}</span></div>
-          </div>
         </div>
+        <div class="summary"><label>Grand Total :</label><div>${fmt(grandTotal)}</div></div>
+        <div style="text-align:right; margin-top:50px; font-weight:600;">J.T. Fruits &amp; Vegetables</div>
+      </div>
+    </div>`;
 
-        <div class="description-container">
-          <div class="description-print">${esc(meta.description)}</div>
-        </div>
-
-        <div class="print-summary-footer">
-          <div class="summary"><label>Total Amount :</label><div>${fmt(totalAmount)}</div></div>
-          <div class="summary">
-            <label>Discount :</label>
-            <div class="discount-line"><span class="highlight-value">${fmt(discountPct)} %</span><span>${fmt(discountValue)}</span></div>
-          </div>
-          <div class="summary"><label>Grand Total :</label><div>${fmt(grandTotal)}</div></div>
-          <div style="text-align:right; margin-top:50px; font-weight:600;">J.T. Fruits &amp; Vegetables</div>
-        </div>
-      </div>`;
-
-    return `<!doctype html><html><head><meta charset="utf-8"/>
-      <title>Lumpsum Invoice ${esc(meta.billNumber)}</title>${styles}
-    </head><body>${onePage}</body></html>`;
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>${isChallan ? 'Challan' : 'Lumpsum Invoice'} ${esc(meta.billNumber)}</title>
+  ${styles}
+</head>
+<body>
+  ${onePage}
+</body>
+</html>`;
   }
 
   private async printHtmlInHiddenIframe(html: string): Promise<void> {
@@ -385,6 +504,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       this.calculateFinalAmount();
 
       const pdfHtml = this.buildPrintHtml({
+        mode: 'invoice',
         clientName: this.clientName || '',
         address: this.address || '',
         billNumber: this.billNumber || '',
