@@ -36,7 +36,7 @@ export class EditRelianceBillsComponent implements OnInit {
 
   billItems: BillItem[] = [];
   clients: any[] = [];
-  selectedClient: any = null;
+  selectedShipToClientId: number | null = null;
 
   clientName = '';
   address = '';
@@ -118,6 +118,12 @@ export class EditRelianceBillsComponent implements OnInit {
       searchText: '',
       filteredProducts: [...this.products]
     };
+  }
+
+  private buildClientAddress(c: any): string {
+    return [c.address1, c.address2, c.subArea, c.area, c.city]
+      .filter(Boolean)
+      .join(', ');
   }
 
   displayProductOption(product: NameWithPrice): string {
@@ -217,6 +223,22 @@ export class EditRelianceBillsComponent implements OnInit {
   private ensureRelianceDefaults(): void {
     if (!this.clientName?.trim()) this.clientName = this.RELIANCE_CLIENT;
     if (!this.address?.trim()) this.address = this.RELIANCE_ADDR;
+    if (!this.shipToName?.trim()) this.shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
+    if (!this.shipToAddress?.trim()) this.shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+  }
+
+  onShipToClientChange(): void {
+    if (this.selectedShipToClientId == null) {
+      this.shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
+      this.shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+      return;
+    }
+
+    const c = this.clients.find(x => x.id === this.selectedShipToClientId);
+    if (!c) return;
+
+    this.shipToName = c.firstName || '';
+    this.shipToAddress = this.buildClientAddress(c);
   }
 
   loadBillForEdit(billNumber: string): void {
@@ -278,22 +300,6 @@ export class EditRelianceBillsComponent implements OnInit {
         this.toast.error('Could not load the bill.');
       }
     });
-  }
-
-  onClientChange(): void {
-    if (this.selectedClient) {
-      const c = this.selectedClient;
-      const parts = [c.address1, c.address2, c.subArea, c.area, c.city].filter(Boolean);
-      this.clientName = c.firstName;
-      this.address = parts.join(', ');
-      setTimeout(() => {
-        this.addressTextareas?.forEach(t => {
-          const el = t.nativeElement;
-          el.style.height = 'auto';
-          el.style.height = el.scrollHeight + 'px';
-        });
-      });
-    }
   }
 
   onPriceKeydown(event: KeyboardEvent, index: number): void {
@@ -591,9 +597,7 @@ export class EditRelianceBillsComponent implements OnInit {
       this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
 
       const copies = Math.max(1, Math.min(50, Math.floor(Number(this.copiesCount) || 1)));
-      const html = typeof (this as any).buildPrintHtmlMulti === 'function'
-        ? this.buildPrintHtmlMulti(validItems, copies)
-        : this.buildPrintHtml(validItems);
+      const html = this.buildPrintHtmlMulti(validItems, copies);
 
       const dataUrl = this.htmlToDataUrl(html);
       const el = (window as any).electron;

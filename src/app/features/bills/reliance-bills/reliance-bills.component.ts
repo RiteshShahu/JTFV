@@ -36,7 +36,8 @@ export class RelianceBillsComponent implements OnInit {
 
   billItems: BillItem[] = [];
   clients: any[] = [];
-  selectedClient: any = null;
+  selectedShipToClientId: number | null = null;
+
   clientName = '';
   address = '';
 
@@ -126,6 +127,12 @@ export class RelianceBillsComponent implements OnInit {
       searchText: '',
       filteredProducts: [...this.products]
     };
+  }
+
+  private buildClientAddress(c: any): string {
+    return [c.address1, c.address2, c.subArea, c.area, c.city]
+      .filter(Boolean)
+      .join(', ');
   }
 
   displayProductOption(product: NameWithPrice): string {
@@ -225,6 +232,22 @@ export class RelianceBillsComponent implements OnInit {
   private ensureRelianceDefaults(): void {
     if (!this.clientName?.trim()) this.clientName = this.RELIANCE_CLIENT;
     if (!this.address?.trim()) this.address = this.RELIANCE_ADDR;
+    if (!this.shipToName?.trim()) this.shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
+    if (!this.shipToAddress?.trim()) this.shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+  }
+
+  onShipToClientChange(): void {
+    if (this.selectedShipToClientId == null) {
+      this.shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
+      this.shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+      return;
+    }
+
+    const c = this.clients.find(x => x.id === this.selectedShipToClientId);
+    if (!c) return;
+
+    this.shipToName = c.firstName || '';
+    this.shipToAddress = this.buildClientAddress(c);
   }
 
   loadBillForEdit(billNumber: string): void {
@@ -279,31 +302,12 @@ export class RelianceBillsComponent implements OnInit {
         setTimeout(() => {
           this.addressTextareas?.forEach(t => this.resizeTextarea(t.nativeElement));
         });
-
-        const match = this.clients.find(c => c.firstName === bill.clientName);
-        if (match) this.selectedClient = match;
       },
       error: err => {
         console.error('Failed to load bill for edit:', err);
         this.toast.error('Could not load the bill.');
       }
     });
-  }
-
-  onClientChange(): void {
-    if (this.selectedClient) {
-      const c = this.selectedClient;
-      const parts = [c.address1, c.address2, c.subArea, c.area, c.city].filter(Boolean);
-      this.clientName = c.firstName;
-      this.address = parts.join(', ');
-      setTimeout(() => {
-        this.addressTextareas?.forEach(t => {
-          const el = t.nativeElement;
-          el.style.height = 'auto';
-          el.style.height = el.scrollHeight + 'px';
-        });
-      });
-    }
   }
 
   onPriceKeydown(event: KeyboardEvent, index: number): void {

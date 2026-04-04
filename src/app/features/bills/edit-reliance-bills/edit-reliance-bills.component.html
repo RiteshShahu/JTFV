@@ -25,6 +25,16 @@
 
     <div class="party">
       <div class="party-title">Ship To</div>
+
+      <div style="margin-bottom: 8px;">
+        <select class="form-control" [(ngModel)]="selectedShipToClientId" (change)="onShipToClientChange()">
+          <option [ngValue]="null">Manual / Default</option>
+          <option *ngFor="let c of clients" [ngValue]="c.id">
+            {{ c.firstName }}{{ c.city ? ' - ' + c.city : '' }}
+          </option>
+        </select>
+      </div>
+
       <div class="party-name">{{ shipToName || 'FRESHPIK SPECTRA POWAI ( T5EP )' }}</div>
       <div class="party-address">
         {{ shipToAddress || 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076' }}
