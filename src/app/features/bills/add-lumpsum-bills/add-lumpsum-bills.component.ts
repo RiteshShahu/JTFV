@@ -370,7 +370,7 @@ export class AddLumpsumBillsComponent implements OnInit, AfterViewInit {
       .challan-mode .gst-line,
       .challan-mode .billno-meta,
       .challan-mode .amount-meta,
-      .challan-mode .print-summary-footer {
+      .challan-mode .summary {
         display: none !important;
       }
 
