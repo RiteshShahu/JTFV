@@ -153,7 +153,7 @@ const PRINTER_PREFERENCES = {
     'Canon LBP2900 on NEW-PC2017',
     '\\\\NEW-PC2017\\Canon LBP2900',
   ],
-  DMART_CITIZEN: 'Microsoft Print to PDF',
+  DMART_CITIZEN: 'Citizen CL-E321 (Copy 1)',
 };
 
 async function listPrinters(win) {
@@ -489,7 +489,7 @@ ipcMain.handle('print:dmart-38x25', async (_event, payload = {}) => {
       return { ok: false, error: 'No HTML received for Dmart print.' };
     }
 
-    const printerName = 'Microsoft Print to PDF';
+    const printerName = 'Citizen CL-E321 (Copy 1)';
 
     await printHtmlDirect({
       html,

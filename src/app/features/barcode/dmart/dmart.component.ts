@@ -404,74 +404,97 @@ export class DmartComponent implements OnInit {
   private generatePrintHTML(): string {
     const head = `
       <meta charset="UTF-8">
-      <meta name="viewport" content="width=304, initial-scale=1.0">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Dmart Label</title>
     `;
 
     const dmartStyles = `
+      @page {
+        size: 38mm 25mm;
+        margin: 0;
+      }
+
       html, body {
         margin: 0;
         padding: 0;
-        width: 304px;
-        height: 188px;
-        overflow: hidden;
+        width: 38mm;
         background: #ffffff;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        font-family: Arial, sans-serif;
+      }
+
+      body {
+        overflow: visible;
       }
 
       .print-section {
-        width: 304px;
-        height: 188px;
         margin: 0;
         padding: 0;
+        width: 100%;
         background: #ffffff;
-        overflow: hidden;
       }
 
       .dmart-label {
         position: relative;
-        width: 312px;
-        height: 196px;
+        width: 39mm;
+        height: 26mm;
+        margin-left: 2mm;
         box-sizing: border-box;
-        padding: 4px 8px 3px 10px;
+        padding: 1.2mm 1.6mm 1mm 1.8mm;
         font-family: Arial, sans-serif;
         display: flex;
         flex-direction: column;
         justify-content: flex-start;
         text-align: left;
-        line-height: 1.02;
+        line-height: 1;
         overflow: hidden;
         background: #ffffff;
+        page-break-after: always;
+        break-after: page;
+      }
+
+      .dmart-label:last-child {
+        page-break-after: auto;
+        break-after: auto;
+      }
+
+      .label-header {
+        font-size: 2.4mm;
+        font-weight: bold;
+        text-align: left;
+        width: 30mm;
+        margin: 0 0 0.3mm 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .label-product {
-        font-size: 18px;
+        font-size: 2.2mm;
         text-align: left;
-        width: 252px;
-        margin: 1px 0 1px 0;
-        padding-left: 2px;
-        box-sizing: border-box;
-        line-height: 1.0;
+        width: 30mm;
+        margin: 0 0 0.4mm 0;
+        line-height: 1;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
 
       .dmart-label img {
-        width: 225px;
-        height: 46px;
-        margin: 1px 0 1px 2px;
+        width: 28.5mm;
+        height: 8mm;
+        margin: 0.2mm 0 0.2mm 0;
         display: block;
         object-fit: fill;
       }
 
       .barcode-value {
-        font-size: 18px;
+        font-size: 2.5mm;
         text-align: left;
-        width: 252px;
-        letter-spacing: 1px;
-        padding-left: 2px;
-        box-sizing: border-box;
-        margin: 0 0 1px 0;
+        width: 30mm;
+        letter-spacing: 0.2mm;
+        margin: 0 0 0.3mm 0;
         line-height: 1;
         white-space: nowrap;
         overflow: hidden;
@@ -480,35 +503,31 @@ export class DmartComponent implements OnInit {
       .info-row {
         display: flex;
         justify-content: space-between;
-        width: 252px;
-        font-size: 16px;
+        width: 30mm;
+        font-size: 2.2mm;
         margin: 0;
-        padding-left: 2px;
-        box-sizing: border-box;
-        line-height: 1.0;
+        line-height: 1;
         white-space: nowrap;
-        gap: 6px;
+        gap: 1.2mm;
       }
 
       .info-left {
         font-weight: normal;
-        font-size: 16px;
+        font-size: 2mm;
         text-align: left;
       }
 
       .price-value {
-        font-size: 16px;
+        font-size: 2.2mm;
         font-weight: bold;
         text-align: left;
       }
 
       .label-footer {
-        font-size: 12px;
+        font-size: 1.45mm;
         text-align: left;
-        width: 252px;
-        margin-top: 1px;
-        padding-left: 2px;
-        box-sizing: border-box;
+        width: 30mm;
+        margin-top: 0.3mm;
         line-height: 1;
         white-space: nowrap;
         overflow: hidden;
@@ -517,15 +536,15 @@ export class DmartComponent implements OnInit {
 
       .side-brand {
         position: absolute;
-        right: 6px;
-        top: 58px;
+        right: -1.5mm;
+        top: 9.2mm;
         transform: rotate(-90deg);
         transform-origin: center;
-        font-size: 21px;
+        font-size: 3.3mm;
         font-weight: bold;
         line-height: 1;
         white-space: nowrap;
-        width: 86px;
+        width: 12mm;
         text-align: center;
         z-index: 5;
       }
