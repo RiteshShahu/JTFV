@@ -234,6 +234,7 @@ export class DmartComponent implements OnInit {
   resetForm() {
     this.packedOnDate = this.getTodayLocalDate();
     this.products = [];
+    this.barcodeCache = {};
     this.addRow();
     this.cdRef.detectChanges();
   }
@@ -313,7 +314,15 @@ export class DmartComponent implements OnInit {
     };
   }
 
+  private barcodeCache: Record<string, string> = {};
+
   private getBarcodeDataUrl(barcode: string): string {
+    if (!barcode) return '';
+
+    if (this.barcodeCache[barcode]) {
+      return this.barcodeCache[barcode];
+    }
+
     const canvas = document.createElement('canvas');
 
     bwipjs.toCanvas(canvas, {
@@ -326,7 +335,9 @@ export class DmartComponent implements OnInit {
       backgroundcolor: 'FFFFFF',
     });
 
-    return canvas.toDataURL('image/png');
+    const dataUrl = canvas.toDataURL('image/png');
+    this.barcodeCache[barcode] = dataUrl;
+    return dataUrl;
   }
 
   printSelected() {
@@ -335,13 +346,8 @@ export class DmartComponent implements OnInit {
     try {
       const payload = this.buildJobPayload();
 
-      this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => { },
-        error: (e) => console.error('Failed to log print job:', e),
-      });
-
       const htmlPayload = {
-        labelsHtml: this.printItems.map((p) => this.generateSingleLabelHTML(p)),
+        html: this.generatePrintHTML(),
         copies: 1,
       };
 
@@ -355,7 +361,13 @@ export class DmartComponent implements OnInit {
       electron.printDmart38x25(htmlPayload).then((result: any) => {
         if (!result?.ok) {
           alert(result?.error || 'Print failed');
+          return;
         }
+
+        this.labelPrints.savePrintJob(payload).subscribe({
+          next: () => { },
+          error: (e) => console.error('Failed to log print job:', e),
+        });
       });
     } catch (e) {
       console.error('Failed to print:', e);

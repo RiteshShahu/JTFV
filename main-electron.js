@@ -153,7 +153,7 @@ const PRINTER_PREFERENCES = {
     'Canon LBP2900 on NEW-PC2017',
     '\\\\NEW-PC2017\\Canon LBP2900',
   ],
-  DMART_CITIZEN: 'Citizen CL-E321',
+  DMART_CITIZEN: 'Microsoft Print to PDF',
 };
 
 async function listPrinters(win) {
@@ -481,35 +481,22 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
 });
 
 ipcMain.handle('print:dmart-38x25', async (_event, payload = {}) => {
-  const { labelsHtml = [], copies = 1 } = payload;
-  log(`IPC print:dmart-38x25 labels=${labelsHtml.length}, copies=${copies}`);
+  const { html = '', copies = 1 } = payload;
+  log(`IPC print:dmart-38x25 htmlLen=${html.length}, copies=${copies}`);
 
   try {
-    if (!Array.isArray(labelsHtml) || labelsHtml.length === 0) {
-      return { ok: false, error: 'No labels received for Dmart print.' };
+    if (!html || !String(html).trim()) {
+      return { ok: false, error: 'No HTML received for Dmart print.' };
     }
 
-    const printerName = 'Citizen CL-E321';
-    const totalCopies = Math.max(1, Math.floor(copies || 1));
-    const imageDataUrls = [];
-
-    for (let c = 0; c < totalCopies; c++) {
-      for (let i = 0; i < labelsHtml.length; i++) {
-        const pngBuffer = await htmlToPngBuffer(labelsHtml[i], 304, 200);
-        imageDataUrls.push(pngBufferToDataUrl(pngBuffer));
-      }
-    }
-
-    const driverHtml = build38x25DriverPrintHtmlFromImages(imageDataUrls);
-    log(`Generated multi-label driver HTML length=${driverHtml.length}`);
-    log(`Total labels in one print job=${imageDataUrls.length}`);
+    const printerName = 'Microsoft Print to PDF';
 
     await printHtmlDirect({
-      html: driverHtml,
+      html,
       printerName,
       pageSize: SIZES.LABEL_38x25,
       landscape: false,
-      copies: 1,
+      copies: Math.max(1, Math.floor(copies || 1)),
     });
 
     log('Dmart print success');
