@@ -24,7 +24,7 @@ export class BarcodeComponent implements OnInit {
     private productService: ProductService,
     private labelPrints: LabelPrintsService,
     private router: Router,
-  ) {}
+  ) { }
 
   ngOnInit(): void {
     this.addRow();
@@ -55,12 +55,10 @@ export class BarcodeComponent implements OnInit {
       this.addRow();
 
       setTimeout(() => {
-        const inputs = document.querySelectorAll(
-          `input[name^='productSearch']`
-        );
-        const lastInput = inputs[inputs.length - 1] as HTMLElement;
-        if (lastInput) {
-          lastInput.focus();
+        const selects = document.querySelectorAll(`select[name^='productName']`);
+        const lastSelect = selects[selects.length - 1] as HTMLElement;
+        if (lastSelect) {
+          lastSelect.focus();
         }
       });
     }
@@ -70,8 +68,6 @@ export class BarcodeComponent implements OnInit {
     this.products.push({
       nameId: null,
       productName: '',
-      searchText: '',
-      filteredOptions: [...this.filteredNameOptions],
       mrp: 0,
       category: '',
       quantity: 1,
@@ -85,101 +81,12 @@ export class BarcodeComponent implements OnInit {
     });
   }
 
-  displayName(option: any): string {
-    if (!option) return '';
-    return `${option.name} ${option.units}`.trim();
-  }
-
-  private normalizeText(value: string): string {
-    return (value || '')
-      .toLowerCase()
-      .replace(/[^\w\s]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-  }
-
-  private normalizeCompact(value: string): string {
-    return this.normalizeText(value).replace(/\s+/g, '');
-  }
-
-  filterProducts(index: number) {
-    const item = this.products[index];
-    const rawSearch = item.searchText || '';
-    const search = this.normalizeText(rawSearch);
-    const compactSearch = this.normalizeCompact(rawSearch);
-
-    if (!search) {
-      item.filteredOptions = [...this.filteredNameOptions];
-      return;
-    }
-
-    const searchWords = search.split(' ').filter(Boolean);
-
-    item.filteredOptions = this.filteredNameOptions.filter((option) => {
-      const fullText = this.normalizeText(`${option.name} ${option.units}`);
-      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
-
-      const allWordsMatch = searchWords.every(word =>
-        fullText.includes(word) || compactText.includes(word)
-      );
-
-      return allWordsMatch || compactText.includes(compactSearch);
-    });
-  }
-
-  onOptionChosen(index: number, selected: any, event: any) {
-    if (!event?.isUserInput || !selected) return;
-
-    const product = this.products[index];
-    product.nameId = selected.id;
-    product.searchText = `${selected.name} ${selected.units}`;
-    this.applySelectedProduct(index, selected);
-  }
-
-  tryAutoSelectClosest(index: number) {
-    const item = this.products[index];
-    const rawSearch = item.searchText || '';
-    const search = this.normalizeText(rawSearch);
-    const compactSearch = this.normalizeCompact(rawSearch);
-
-    if (!search) return;
-
-    const exact = this.filteredNameOptions.find(option =>
-      this.normalizeText(`${option.name} ${option.units}`) === search
-    );
-
-    if (exact) {
-      item.nameId = exact.id;
-      item.searchText = `${exact.name} ${exact.units}`;
-      this.applySelectedProduct(index, exact);
-      return;
-    }
-
-    const tokens = search.split(' ').filter(Boolean);
-
-    const closest = this.filteredNameOptions.find(option => {
-      const fullText = this.normalizeText(`${option.name} ${option.units}`);
-      const compactText = this.normalizeCompact(`${option.name} ${option.units}`);
-
-      return tokens.every(token =>
-        fullText.includes(token) || compactText.includes(token)
-      ) || compactText.includes(compactSearch);
-    });
-
-    if (closest) {
-      item.nameId = closest.id;
-      item.searchText = `${closest.name} ${closest.units}`;
-      this.applySelectedProduct(index, closest);
-    }
-  }
-
   onProductIdChange(i: number, nameId: number | null) {
-    const selected = this.nameOptions.find(n => n.id === nameId!);
+    const selected = this.nameOptions.find((n) => n.id === nameId!);
     const product = this.products[i];
 
     if (!selected) {
       product.productName = '';
-      product.searchText = '';
       product.category = '';
       product.units = '';
       product.dbBarcode = '';
@@ -190,26 +97,7 @@ export class BarcodeComponent implements OnInit {
       return;
     }
 
-    product.searchText = `${selected.name} ${selected.units}`;
-    this.applySelectedProduct(i, selected);
-  }
-
-  onMrpChange(index: number) {
-    this.products[index].mrpEdited = true;
-    this.generateBarcode(this.products[index]);
-  }
-
-  onExpiryChange(index: number) {
-    this.products[index].expiryEdited = true;
-    this.updateExpiry(index);
-  }
-
-  private applySelectedProduct(i: number, selected: any) {
-    const product = this.products[i];
-
-    product.nameId = selected.id;
     product.productName = `${selected.name} ${selected.units}`;
-    product.searchText = `${selected.name} ${selected.units}`;
     product.category = selected.type
       ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
       : '';
@@ -227,6 +115,16 @@ export class BarcodeComponent implements OnInit {
     product.expiryDate = packed.toISOString().split('T')[0];
 
     this.generateBarcode(product);
+  }
+
+  onMrpChange(index: number) {
+    this.products[index].mrpEdited = true;
+    this.generateBarcode(this.products[index]);
+  }
+
+  onExpiryChange(index: number) {
+    this.products[index].expiryEdited = true;
+    this.updateExpiry(index);
   }
 
   private getTodayLocalDate(): string {
@@ -284,7 +182,6 @@ export class BarcodeComponent implements OnInit {
     if (selected) {
       const product = this.products[i];
       product.productName = `${selected.name} ${selected.units}`;
-      product.searchText = `${selected.name} ${selected.units}`;
       product.category = selected.type
         ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
         : '';
@@ -327,7 +224,7 @@ export class BarcodeComponent implements OnInit {
     const items = this.products
       .filter(p => p.quantity > 0 && p.productName && p.mrp > 0 && p.barcode)
       .map(p => ({
-        nameId: this.nameOptions.find(n => `${n.name} ${n.units}` === p.productName)?.id,
+        nameId: p.nameId,
         productName: p.productName,
         units: p.units,
         category: p.category,
@@ -351,7 +248,7 @@ export class BarcodeComponent implements OnInit {
     try {
       const payload = this.buildJobPayload();
       this.labelPrints.savePrintJob(payload).subscribe({
-        next: () => {},
+        next: () => { },
         error: (e) => console.error('Failed to log print job:', e),
       });
     } catch (e) {
@@ -422,286 +319,252 @@ export class BarcodeComponent implements OnInit {
     const head = `\n<meta charset="UTF-8">\n<meta name="viewport" content="width=240px">\n<title></title>`;
 
     const dmartStyles = `
-        @media print {
-          @page {
-            size: 50mm 50mm;
-            margin: 0;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-          }
-          .print-section {
-            margin: 0;
-            padding: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            justify-content: flex-start;
-          }
+      @media print {
+        @page {
+          size: 50mm 50mm;
+          margin: 0;
         }
-
-        .dmart-label {
-          width: 240px;
-          height: 189px;
-          padding: 6px 10px;
-          box-sizing: border-box;
-          display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          font-family: Arial, sans-serif;
-          font-size: 10px;
-          line-height: 1.2;
-          text-align: left;
-          page-break-inside: avoid;
-          border: 1px solid transparent;
-          position: relative;
-          overflow: visible;
+        body {
+          margin: 0;
+          padding: 0;
         }
-
-        .barcode-row {
+        .print-section {
+          margin: 0;
+          padding: 6px;
           display: flex;
-          flex-direction: row;
-          align-items: center;
+          flex-wrap: wrap;
+          gap: 6px;
           justify-content: flex-start;
-          margin-top: 2px;
-          gap: 4px;
         }
+      }
 
-        .barcode-left {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-        }
+      .dmart-label {
+        width: 240px;
+        height: 189px;
+        padding: 6px 10px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+        line-height: 1.2;
+        text-align: left;
+        page-break-inside: avoid;
+        border: 1px solid transparent;
+        position: relative;
+        overflow: visible;
+      }
 
-        .barcode-left .label-product {
-          font-size: 11px;
-          font-weight: bold;
-          margin-bottom: 2px;
-          text-align: left;
-        }
+      .barcode-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: flex-start;
+        margin-top: 2px;
+        gap: 4px;
+      }
 
-        .barcode-left img {
-          width: 160px;
-          height: 35px;
-        }
+      .barcode-left {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+      }
 
-        .barcode-left .barcode-value {
-          font-size: 13px;
-          letter-spacing: 1px;
-          text-align: center;
-          margin-top: 2px;
-          width: 160px;
-        }
+      .barcode-left .label-product {
+        font-size: 11px;
+        font-weight: bold;
+        margin-bottom: 2px;
+        text-align: left;
+      }
 
-        .side-brand {
-          writing-mode: vertical-rl;
-          text-orientation: mixed;
-          transform: rotate(180deg);
-          font-size: 15px;
-          font-weight: bold;
-          color: black;
-          padding-left: 2px;
-          line-height: 1;
-        }
+      .barcode-left img {
+        width: 160px;
+        height: 35px;
+      }
 
-        .label-bold {
-          font-weight: bold;
-        }
+      .barcode-left .barcode-value {
+        font-size: 13px;
+        letter-spacing: 1px;
+        text-align: center;
+        margin-top: 2px;
+        width: 160px;
+      }
 
-        .label-info-row {
-          display: flex;
-          justify-content: space-between;
-          margin: 2px 0;
-        }
+      .side-brand {
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        transform: rotate(180deg);
+        font-size: 15px;
+        font-weight: bold;
+        color: black;
+        padding-left: 2px;
+        line-height: 1;
+      }
 
-        .dmart-footer {
-          text-align: center;
-          font-size: 9px;
-          line-height: 1.1;
-          margin-top: 4px;
-        }
-      `;
+      .dmart-footer {
+        text-align: center;
+        font-size: 9px;
+        line-height: 1.1;
+        margin-top: 4px;
+      }
+    `;
 
     const oldDmartStyles = `
-        @media print {
-          @page {
-            size: 38mm 25mm;
-            margin: 0mm;
-          }
-          body, html {
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          .print-section {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0;
-            margin: 0;
-            padding: 0;
-          }
+      @media print {
+        @page {
+          size: 38mm 25mm;
+          margin: 0mm;
         }
-
-        .dmart-label {
-          position: relative;
-          width: 136px;
-          height: 94px;
-          box-sizing: border-box;
-          padding: 2px 3px 1px;
-          font-family: Arial, sans-serif;
-          font-size: 9px;
+        body, html {
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+        .print-section {
           display: flex;
-          flex-direction: column;
-          justify-content: flex-start;
-          text-align: left;
-          line-height: 1.05;
-          overflow: hidden;
-        }
-
-        .label-header {
-          font-size: 9px;
-          text-align: center;
-          width: 100%;
+          flex-wrap: wrap;
+          gap: 0;
           margin: 0;
+          padding: 0;
         }
+      }
 
-        .label-product {
-          font-size: 9px;
-          text-align: left;
-          width: 100%;
-          margin: 1px 0;
-          padding-left: 2px;
-        }
+      .dmart-label {
+        position: relative;
+        width: 136px;
+        height: 94px;
+        box-sizing: border-box;
+        padding: 2px 3px 1px;
+        font-family: Arial, sans-serif;
+        font-size: 9px;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        text-align: left;
+        line-height: 1.05;
+        overflow: hidden;
+      }
 
-        .dmart-label img {
-          width: 120px;
-          height: 30px;
-          margin: 0 0 1px;
-        }
+      .label-header {
+        font-size: 9px;
+        text-align: center;
+        width: 100%;
+        margin: 0;
+      }
 
-        .barcode-value {
-          font-size: 10px;
-          text-align: left;
-          width: 100%;
-          letter-spacing: 1px;
-          padding-left: 2px;
-          margin: 0 0 1px;
-        }
+      .label-product {
+        font-size: 9px;
+        text-align: left;
+        width: 100%;
+        margin: 1px 0;
+        padding-left: 2px;
+      }
 
-        .info-row {
-          display: flex;
-          justify-content: space-between;
-          width: 100%;
-          font-size: 9px;
-          margin: 0;
-        }
+      .dmart-label img {
+        width: 120px;
+        height: 30px;
+        margin: 0 0 1px;
+      }
 
-        .info-left {
-          font-weight: normal;
-          font-size: 9.5px;
-          text-align: center;
-        }
+      .barcode-value {
+        font-size: 10px;
+        text-align: left;
+        width: 100%;
+        letter-spacing: 1px;
+        padding-left: 2px;
+        margin: 0 0 1px;
+      }
 
-        .price-value {
-          font-size: 9.5px;
-          font-weight: bold;
-          text-align: center;
-        }
+      .info-row {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+        font-size: 9px;
+        margin: 0;
+      }
 
-        .label-footer {
-          font-size: 7px;
-          text-align: left;
-          width: 100%;
-          margin-top: 1px;
-          line-height: 1;
-          padding-bottom: 1px;
-        }
+      .info-left {
+        font-weight: normal;
+        font-size: 9.5px;
+        text-align: center;
+      }
 
-        .side-brand {
-          position: absolute;
-          right: -4px;
-          top: 28%;
-          transform: rotate(-90deg);
-          transform-origin: right top;
-          font-size: 14px;
-          font-weight: bold;
-        }
-      `;
+      .price-value {
+        font-size: 9.5px;
+        font-weight: bold;
+        text-align: center;
+      }
+
+      .label-footer {
+        font-size: 7px;
+        text-align: left;
+        width: 100%;
+        margin-top: 1px;
+        line-height: 1;
+        padding-bottom: 1px;
+      }
+
+      .side-brand {
+        position: absolute;
+        right: -4px;
+        top: 28%;
+        transform: rotate(-90deg);
+        transform-origin: right top;
+        font-size: 14px;
+        font-weight: bold;
+      }
+    `;
 
     const relianceStyles = `
-        @media print {
-          @page {
-            size: 50mm 50mm;
-            margin: 0;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-          }
-          .print-section {
-            margin: 0;
-            padding: 6px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 6px;
-            justify-content: flex-start;
-          }
+      @media print {
+        @page {
+          size: 50mm 50mm;
+          margin: 0;
         }
-
-        .reliance-label {
-          width: 240px;
-          height: 189px;
-          padding: 6px 10px;
-          box-sizing: border-box;
+        body {
+          margin: 0;
+          padding: 0;
+        }
+        .print-section {
+          margin: 0;
+          padding: 6px;
           display: flex;
-          flex-direction: column;
-          justify-content: space-between;
-          font-family: Arial, sans-serif;
-          font-size: 10px;
-          line-height: 1.2;
-          text-align: left;
-          page-break-inside: avoid;
-          border: 1px solid transparent;
+          flex-wrap: wrap;
+          gap: 6px;
+          justify-content: flex-start;
         }
+      }
 
-        .reliance-label canvas {
-          display: block;
-          margin: 2px auto;
-          width: 160px;
-          height: 40px;
-        }
+      .reliance-label {
+        width: 240px;
+        height: 189px;
+        padding: 6px 10px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        font-family: Arial, sans-serif;
+        font-size: 10px;
+        line-height: 1.2;
+        text-align: left;
+        page-break-inside: avoid;
+        border: 1px solid transparent;
+      }
 
-        .barcode-value {
-          font-size: 14px;
-          letter-spacing: 1px;
-          margin: 2px 0;
-          text-align: center;
-        }
+      .barcode-value {
+        font-size: 14px;
+        letter-spacing: 1px;
+        margin: 2px 0;
+        text-align: center;
+      }
 
-        .label-product {
-          font-size: 11px;
-          font-weight: bold;
-          margin: 2px 0;
-          text-align: center;
-        }
-
-        .label-bold {
-          font-weight: bold;
-        }
-
-        .label-info-row {
-          display: flex;
-          justify-content: space-between;
-          margin: 2px 0;
-        }
-
-        .reliance-footer {
-          text-align: center;
-          font-size: 9px;
-          line-height: 1.1;
-          margin-top: 4px;
-        }
-      `;
+      .label-product {
+        font-size: 11px;
+        font-weight: bold;
+        margin: 2px 0;
+        text-align: center;
+      }
+    `;
 
     let css = '';
     let body = '';
@@ -793,24 +656,24 @@ export class BarcodeComponent implements OnInit {
         const exp = formatDate(p.expiryDate);
 
         return `
-            <div class="dmart-label">
-              <span class="side-brand">Dmart</span>
-              <div class="label-header">J T FRUITS &amp; VEG</div>
-              <div class="label-product">${p.productName}</div>
-              <img id="dmart-bar-${i}" />
-              <div class="barcode-value">${p.barcode}</div>
+          <div class="dmart-label">
+            <span class="side-brand">Dmart</span>
+            <div class="label-header">J T FRUITS &amp; VEG</div>
+            <div class="label-product">${p.productName}</div>
+            <img id="dmart-bar-${i}" />
+            <div class="barcode-value">${p.barcode}</div>
 
-              <div class="info-row">
-                <div class="info-left">M.R.P.</div>
-                <div>Pkd. On ${pkd}</div>
-              </div>
-              <div class="info-row">
-                <div class="price-value">₹${p.mrp.toFixed(2)}</div>
-                <div>Exp. Dt. ${exp}</div>
-              </div>
+            <div class="info-row">
+              <div class="info-left">M.R.P.</div>
+              <div>Pkd. On ${pkd}</div>
+            </div>
+            <div class="info-row">
+              <div class="price-value">₹${p.mrp.toFixed(2)}</div>
+              <div>Exp. Dt. ${exp}</div>
+            </div>
 
-              <div class="label-footer">Incl. of all Taxes)</div>
-            </div>`;
+            <div class="label-footer">Incl. of all Taxes)</div>
+          </div>`;
       })
       .join('');
   }
@@ -819,9 +682,10 @@ export class BarcodeComponent implements OnInit {
     const promises: Promise<void>[] = [];
 
     this.printItems.forEach((p, i) => {
-      const imgId = this.selectedPrintStyle === 'reliance'
-        ? `rel-barcode-img-${i}`
-        : `dmart-bar-${i}`;
+      const imgId =
+        this.selectedPrintStyle === 'reliance'
+          ? `rel-barcode-img-${i}`
+          : `dmart-bar-${i}`;
 
       const imgEl = win.document.getElementById(imgId) as HTMLImageElement;
       if (!imgEl || !p.barcode) return;
@@ -867,7 +731,6 @@ export class BarcodeComponent implements OnInit {
         if (!match || match.type?.toLowerCase() !== 'vegetable') {
           p.nameId = null;
           p.productName = '';
-          p.searchText = '';
           p.category = '';
           p.barcode = '';
           p.dbBarcode = '';
@@ -877,7 +740,6 @@ export class BarcodeComponent implements OnInit {
     }
 
     this.products.forEach((p) => {
-      p.filteredOptions = [...this.filteredNameOptions];
       this.generateBarcode(p);
     });
 
@@ -890,9 +752,10 @@ export class BarcodeComponent implements OnInit {
       return;
     }
 
-    const list = this.selectedPrintStyle === 'reliance'
-      ? this.nameOptions.filter(n => n.type?.toLowerCase() === 'vegetable')
-      : this.nameOptions;
+    const list =
+      this.selectedPrintStyle === 'reliance'
+        ? this.nameOptions.filter((n) => n.type?.toLowerCase() === 'vegetable')
+        : this.nameOptions;
 
     this.printItems = list
       .map((n) => {
@@ -909,7 +772,6 @@ export class BarcodeComponent implements OnInit {
         const item: any = {
           nameId: n.id,
           productName: `${n.name} ${n.units}`,
-          searchText: `${n.name} ${n.units}`,
           units: n.units,
           category,
           mrp: Number(n.mrp ?? 0),
@@ -923,7 +785,7 @@ export class BarcodeComponent implements OnInit {
         this.generateBarcode(item);
         return item;
       })
-      .filter(p => p.productName && p.mrp > 0 && p.barcode);
+      .filter((p) => p.productName && p.mrp > 0 && p.barcode);
 
     if (this.printItems.length === 0) {
       alert('No valid items to print (check MRP/barcode/category).');
