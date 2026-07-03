@@ -60,7 +60,7 @@
           <td>{{ bill.clientName }}</td>
           <td>{{ bill.billDate }}</td>
           <td>{{ bill.totalAmount | currency:'INR' }}</td>
-          <td>{{ bill.finalAmount | currency:'INR' }}</td>
+          <td>{{ (bill.finalAmount || bill.totalAmount) | currency:'INR' }}</td>
 
           <!-- Status badge is now the toggle -->
           <td>

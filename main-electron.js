@@ -50,6 +50,7 @@ const createWindow = () => {
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    show: false, // Start hidden to prevent visual flickering
     icon: path.join(__dirname, 'assets', 'logo.ico'),
     webPreferences: {
       nodeIntegration: false,
@@ -57,6 +58,10 @@ const createWindow = () => {
       preload: path.join(__dirname, 'preload.cjs'),
     }
   });
+
+  // Maximize the window and then show it
+  mainWindow.maximize();
+  mainWindow.show();
 
   const url = 'http://localhost:3001';
   loadWithRetry(mainWindow, url).catch((err) =>
@@ -293,7 +298,7 @@ async function printHtmlDirect({ html, printerName, pageSize, landscape = false,
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -326,7 +331,7 @@ async function htmlToPngBuffer(html, widthPx = 304, heightPx = 200) {
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
   }
 }
 
@@ -475,7 +480,7 @@ ipcMain.handle('print:canon-a4', async (_event, { url, landscape = false, copies
   } finally {
     try {
       if (!win.isDestroyed()) win.close();
-    } catch {}
+    } catch { }
     gentleRefocus();
   }
 });

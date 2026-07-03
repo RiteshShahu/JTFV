@@ -1,12 +1,14 @@
 <app-navbar></app-navbar>
+
 <div class="content">
   <h2>Product Search</h2>
 
+  <!-- Search Section -->
   <div class="search-section">
     <!-- Search By Dropdown -->
     <div class="form-group">
       <label for="searchBy">Search By</label>
-      <select id="searchBy" [(ngModel)]="searchBy">
+      <select id="searchBy" [(ngModel)]="searchBy" (change)="onSearch()">
         <option value="name">Product Name</option>
         <option value="type">Type</option>
         <option value="priority">Priority</option>
@@ -17,51 +19,195 @@
     </div>
 
     <!-- Search Input with Clear Icon -->
-    <div class="form-group flex-grow input-group">
+    <div class="form-group flex-grow">
       <label for="searchText">Search</label>
       <div class="input-with-clear">
-        <input id="searchText" type="text" placeholder="Enter search text" [(ngModel)]="searchText" (input)="onSearch()" />
-        <span class="clear-icon" *ngIf="searchText" (click)="clearSearch()">×</span>
+        <input id="searchText" type="text" placeholder="Enter search text" [(ngModel)]="searchText"
+          (input)="onSearchInput($event)" [attr.aria-label]="'Search by ' + searchBy" />
+        <span class="clear-icon" *ngIf="searchText" (click)="clearSearch()" role="button" tabindex="0"
+          (keydown.enter)="clearSearch()" (keydown.space)="clearSearch(); $event.preventDefault()"
+          aria-label="Clear search">×</span>
       </div>
     </div>
 
     <!-- Buttons -->
     <div class="button-group">
-      <button class="button" (click)="onSearch()">Search</button>
-      <button class="button" (click)="backToHome()">Back To Home</button>
+      <button class="button" (click)="onSearch()" [disabled]="isLoading">
+        <span *ngIf="!isLoading">Search</span>
+        <span *ngIf="isLoading" class="button-loading">
+          <span class="spinner-small"></span>
+          Searching...
+        </span>
+      </button>
+      <button class="button button-secondary" (click)="downloadExcel()"
+        [disabled]="isLoading || filteredProducts.length === 0">
+        Download Excel
+      </button>
+      <button class="button button-outline" (click)="backToHome()">
+        Back To Home
+      </button>
     </div>
   </div>
 
-  <div class="product-count">
+  <!-- Error Message -->
+  <div class="alert alert-error" *ngIf="errorMessage" role="alert">
+    <span class="alert-icon">⚠</span>
+    <span>{{ errorMessage }}</span>
+    <button class="alert-close" (click)="dismissError()" aria-label="Dismiss error">×</button>
+  </div>
+
+  <!-- Success Message -->
+  <div class="alert alert-success" *ngIf="successMessage" role="status">
+    <span class="alert-icon">✓</span>
+    <span>{{ successMessage }}</span>
+    <button class="alert-close" (click)="dismissSuccess()" aria-label="Dismiss message">×</button>
+  </div>
+
+  <!-- Product Count -->
+  <div class="product-count" *ngIf="!isLoading">
     Showing {{ filteredProducts.length }} of {{ products.length }} products
   </div>
 
+  <!-- Table Container -->
   <div class="excel-table-container">
-    <table class="excel-table">
+    <!-- Loading State -->
+    <div *ngIf="isLoading && products.length === 0" class="state-container loading-state">
+      <span class="spinner"></span>
+      <span>Loading products...</span>
+    </div>
+
+    <!-- Empty State - No Products at All -->
+    <div *ngIf="!isLoading && products.length === 0 && !errorMessage" class="state-container empty-state">
+      <div class="empty-icon">📦</div>
+      <h3>No Products Found</h3>
+      <p>There are no products in the system yet.</p>
+    </div>
+
+    <!-- Empty State - No Search Results -->
+    <div *ngIf="!isLoading && products.length > 0 && filteredProducts.length === 0" class="state-container empty-state">
+      <div class="empty-icon">🔍</div>
+      <h3>No Matching Products</h3>
+      <p>No products found matching "<strong>{{ searchText }}</strong>" in {{ getSearchByLabel() }}</p>
+      <button class="button button-secondary" (click)="clearSearch()">
+        Clear Search
+      </button>
+    </div>
+
+    <!-- Table -->
+    <table class="excel-table" *ngIf="!isLoading && filteredProducts.length > 0" role="grid">
       <thead>
         <tr>
-          <th (click)="sortBy('name')">Product Name</th>
-          <th (click)="sortBy('type')">Type</th>
-          <th (click)="sortBy('priority')">Priority</th>
-          <th (click)="sortBy('units')">Units</th>
-          <th (click)="sortBy('mrp')">MRP</th>
-          <th (click)="sortBy('expiryDays')">Expiry Days</th>
-          <th>Edit</th>
+          <th (click)="sortBy('name')" [class.sorted]="sortField === 'name'" [attr.aria-sort]="getAriaSort('name')"
+            role="columnheader">
+            <span class="th-content">
+              Product Name
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'name'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'name'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th (click)="sortBy('type')" [class.sorted]="sortField === 'type'" [attr.aria-sort]="getAriaSort('type')"
+            role="columnheader">
+            <span class="th-content">
+              Type
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'type'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'type'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th (click)="sortBy('priority')" [class.sorted]="sortField === 'priority'"
+            [attr.aria-sort]="getAriaSort('priority')" role="columnheader">
+            <span class="th-content">
+              Priority
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'priority'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'priority'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th (click)="sortBy('units')" [class.sorted]="sortField === 'units'" [attr.aria-sort]="getAriaSort('units')"
+            role="columnheader">
+            <span class="th-content">
+              Units
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'units'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'units'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th (click)="sortBy('mrp')" [class.sorted]="sortField === 'mrp'" [attr.aria-sort]="getAriaSort('mrp')"
+            role="columnheader">
+            <span class="th-content">
+              MRP
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'mrp'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'mrp'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th (click)="sortBy('expiryDays')" [class.sorted]="sortField === 'expiryDays'"
+            [attr.aria-sort]="getAriaSort('expiryDays')" role="columnheader">
+            <span class="th-content">
+              Expiry Days
+              <span class="sort-icon">
+                <span *ngIf="sortField === 'expiryDays'" class="sort-active">
+                  {{ sortDirection === 'asc' ? '↑' : '↓' }}
+                </span>
+                <span *ngIf="sortField !== 'expiryDays'" class="sort-inactive">↕</span>
+              </span>
+            </span>
+          </th>
+          <th class="th-action">Edit</th>
         </tr>
       </thead>
       <tbody>
-        <tr *ngFor="let product of filteredProducts">
-          <td>{{ product.name }}</td>
-          <td>{{ product.type }}</td>
-          <td>{{ product.priority }}</td>
-          <td>{{ product.units }}</td>
-          <td>{{ product.mrp || '-' }}</td>
-          <td>{{ product.expiryDays || '-' }}</td>
+        <tr *ngFor="let product of filteredProducts; trackBy: trackByProductId"
+          [class.row-highlight]="isRowHighlighted(product)">
+          <td>{{ product.name || '-' }}</td>
           <td>
-            <button class="action-button edit" (click)="onEdit(product.id)" [disabled]="!product.id">Edit</button>
+            <span class="type-badge" [class]="getTypeBadgeClass(product.type)">
+              {{ product.type || '-' }}
+            </span>
+          </td>
+          <td>{{ product.priority || '-' }}</td>
+          <td>{{ product.units || '-' }}</td>
+          <td class="numeric-cell">{{ product.mrp != null ? product.mrp : '-' }}</td>
+          <td class="numeric-cell">{{ product.expiryDays != null ? product.expiryDays : '-' }}</td>
+          <td class="action-cell">
+            <button class="action-button edit" (click)="onEdit(product.id)" [disabled]="!product.id"
+              [attr.aria-label]="'Edit ' + product.name">
+              Edit
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
+
+    <!-- Pagination (if needed for large datasets) -->
+    <div class="pagination" *ngIf="filteredProducts.length > pageSize">
+      <button class="pagination-button" (click)="goToPage(currentPage - 1)" [disabled]="currentPage === 1"
+        aria-label="Previous page">
+        ← Prev
+      </button>
+      <span class="pagination-info">
+        Page {{ currentPage }} of {{ totalPages }}
+      </span>
+      <button class="pagination-button" (click)="goToPage(currentPage + 1)" [disabled]="currentPage === totalPages"
+        aria-label="Next page">
+        Next →
+      </button>
+    </div>
   </div>
 </div>

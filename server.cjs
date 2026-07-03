@@ -438,6 +438,8 @@ app.put('/api/bills/:billNumber', (req, res) => {
     UPDATE bills SET
       clientName = ?,
       address = ?,
+      shipToName=?,
+      shipToAddress=?,
       billDate = ?,
       discount = ?,
       discountAmount = ?,
@@ -451,6 +453,8 @@ app.put('/api/bills/:billNumber', (req, res) => {
   const values = [
     b.clientName || '',
     b.address || '',
+    b.shipToName || '',
+    b.shipToAddress || '',
     b.billDate || new Date().toISOString().substring(0, 10),
     b.discount ?? 0,
     b.discountAmount ?? null,
@@ -988,7 +992,7 @@ function createMailTransporter() {
     service: 'gmail',
     auth: {
       user: process.env.MAIL_USER || 'jkumarshahu5@gmail.com',
-      pass: process.env.MAIL_PASS || 'kwwq idov gtzp lshj',
+      pass: process.env.MAIL_PASS || 'ezve brfd xjpt bgtp',
     },
   });
 }

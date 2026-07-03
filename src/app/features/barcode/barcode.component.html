@@ -1,90 +1,171 @@
 <app-navbar class="no-print"></app-navbar>
 
 <div class="container">
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" *ngIf="isLoading">
+    <div class="loading-spinner"></div>
+    <p>Generating barcodes...</p>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-notification" [class.show]="toast.show" [class.success]="toast.type === 'success'"
+    [class.error]="toast.type === 'error'" [class.warning]="toast.type === 'warning'" role="alert" aria-live="polite">
+    <span class="toast-icon">{{ toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : '⚠' }}</span>
+    <span class="toast-message">{{ toast.message }}</span>
+  </div>
+
   <div class="header no-print">
     <h1>Reliance Barcode Generator</h1>
+    <p class="header-subtitle" *ngIf="totalPrintItems > 0">
+      {{ totalPrintItems }} label{{ totalPrintItems !== 1 ? 's' : '' }} ready to print
+    </p>
   </div>
 
   <div class="barcode-top-options no-print">
     <div class="packed-date-wrapper">
       <label for="packedOn" class="packed-date-label">📦 <strong>Packed On Date</strong></label>
       <input type="date" id="packedOn" name="packedOn" class="form-control packed-date-input" [(ngModel)]="packedOnDate"
-        (change)="onPackedOnChange()" />
+        (change)="onPackedOnChange()" [max]="getTodayLocalDate()" />
     </div>
 
     <div class="print-style-wrapper">
-      <label class="print-style-label">🖨️ Select Print Style:</label>
-      <select class="form-select print-style-select" [(ngModel)]="selectedPrintStyle" name="printStyle"
+      <label for="printStyle" class="print-style-label">🖨️ <strong>Print Style:</strong></label>
+      <select id="printStyle" class="form-select print-style-select" [(ngModel)]="selectedPrintStyle" name="printStyle"
         (change)="onPrintStyleChange(selectedPrintStyle)">
         <option value="reliance">Reliance</option>
-        <option value="dmart">D-Mart 50*50</option>
-        <option value="old-dmart">DMart 38*25</option>
+        <option value="dmart">D-Mart 50×50</option>
+        <option value="old-dmart">DMart 38×25</option>
       </select>
     </div>
   </div>
 
-  <form>
-    <table class="table">
+  <!-- Validation Summary -->
+  <div class="validation-summary no-print" *ngIf="validationErrors.length > 0">
+    <div class="validation-header">
+      <span>⚠️ Please fix the following issues:</span>
+    </div>
+    <ul class="validation-list">
+      <li *ngFor="let error of validationErrors">{{ error }}</li>
+    </ul>
+  </div>
+
+  <form (keydown.control.p)="$event.preventDefault(); printSelected()">
+    <table class="table" role="grid">
       <thead>
         <tr>
+          <th class="col-row-num">#</th>
           <th class="col-product">Product</th>
           <th class="col-small">Qty</th>
           <th class="col-small">M.R.P. (₹)</th>
           <th>Category</th>
-          <th>Delete</th>
+          <th class="col-actions">Actions</th>
         </tr>
       </thead>
 
       <tbody>
-        <tr *ngFor="let item of products; let i = index; trackBy: trackByIndex">
+        <tr *ngFor="let item of products; let i = index; trackBy: trackByProductId" [class.row-error]="hasRowErrors(i)"
+          [class.row-complete]="isRowComplete(item)">
+          <td class="row-number">{{ i + 1 }}</td>
+
           <td>
             <select class="form-control" name="productName{{i}}" [(ngModel)]="item.nameId"
-              (ngModelChange)="onProductIdChange(i, $event)">
+              (ngModelChange)="onProductIdChange(i, $event)" [attr.aria-label]="'Select product for row ' + (i + 1)">
               <option [ngValue]="null">Select Product</option>
-              <option *ngFor="let option of filteredNameOptions" [ngValue]="option.id">
+              <option *ngFor="let option of getFilteredNameOptions()" [ngValue]="option.id">
                 {{ option.name }} {{ option.units }}
               </option>
             </select>
           </td>
 
           <td>
-            <input type="number" class="form-control" [(ngModel)]="item.quantity" name="quantity{{i}}" />
+            <input type="number" class="form-control" [(ngModel)]="item.quantity" name="quantity{{i}}" min="1" max="999"
+              [attr.aria-label]="'Quantity for row ' + (i + 1)" />
           </td>
 
-          <td>
+          <td [class.cell-error]="item.mrp <= 0 && item.nameId !== null">
             <input type="number" class="form-control" [(ngModel)]="item.mrp" name="mrp{{i}}" (change)="onMrpChange(i)"
-              (keydown)="onMrpKeyDown($event, i)" />
+              (keydown)="onMrpKeyDown($event, i)" min="0" step="0.01" placeholder="0.00"
+              [attr.aria-label]="'MRP for row ' + (i + 1)" />
           </td>
 
-          <td>
+          <td [class.cell-error]="!item.category && item.nameId !== null">
             <select class="form-control" [(ngModel)]="item.category" name="category{{i}}"
-              (change)="generateBarcode(item)" [tabindex]="-1">
+              (change)="generateBarcode(item)" [tabindex]="-1" [attr.aria-label]="'Category for row ' + (i + 1)">
               <option value="">Select</option>
               <option value="Fruit">Fruit</option>
               <option value="Vegetable">Vegetable</option>
             </select>
           </td>
 
-          <td class="no-print">
-            <button type="button" class="btn btn-outline-danger delete-btn" (click)="removeRow(i)" [tabindex]="-1">
-              Delete
+          <td class="no-print col-actions">
+            <div class="action-buttons">
+              <button type="button" class="btn-icon btn-duplicate" (click)="duplicateRow(i)" [tabindex]="-1"
+                [disabled]="!item.nameId" [attr.aria-label]="'Duplicate row ' + (i + 1)" title="Duplicate this row">
+                Copy
+              </button>
+              <button type="button" class="btn-icon btn-delete" (click)="removeRow(i)" [tabindex]="-1"
+                [attr.aria-label]="'Delete row ' + (i + 1)" title="Delete this row">
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+
+        <!-- Empty State -->
+        <tr *ngIf="products.length === 0" class="empty-row">
+          <td colspan="6" class="empty-state">
+            <p>No products added yet</p>
+            <button type="button" class="btn btn-outline-primary" (click)="addRow()">
+              + Add First Product
             </button>
           </td>
         </tr>
       </tbody>
     </table>
 
-    <div class="actions no-print">
-      <button type="button" class="btn btn-outline-primary add-btn" (click)="addRow()">Add Row</button>
-      <button type="button" class="btn btn-warning" (click)="resetForm()">Refresh</button>
-      <button type="button" class="btn btn-primary" (click)="printSelected()">Print</button>
+    <!-- Print Summary Card -->
+    <div class="print-summary no-print" *ngIf="getValidProducts().length > 0">
+      <div class="summary-content">
+        <div class="summary-stats">
+          <div class="stat-item">
+            <span class="stat-value">{{ getValidProducts().length }}</span>
+            <span class="stat-label">Products</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">{{ totalPrintItems }}</span>
+            <span class="stat-label">Labels</span>
+          </div>
+          <div class="stat-divider"></div>
+          <div class="stat-item">
+            <span class="stat-value">₹{{ getTotalMRP() }}</span>
+            <span class="stat-label">Total MRP</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-      <button type="button" class="btn-back" (click)="testPreview()">
+    <div class="actions no-print">
+      <button type="button" class="btn btn-outline-primary add-btn" (click)="addRow()" aria-label="Add new row">
+        + Add Row
+      </button>
+
+      <button type="button" class="btn btn-warning" (click)="resetForm()" aria-label="Refresh form">
+        Refresh
+      </button>
+
+      <button type="button" class="btn btn-primary print-btn" (click)="printSelected()"
+        [disabled]="totalPrintItems === 0" aria-label="Print selected barcodes">
+        Print
+        <span class="print-count" *ngIf="totalPrintItems > 0">{{ totalPrintItems }}</span>
+      </button>
+
+      <button type="button" class="btn-back" (click)="testPreview()" [disabled]="totalPrintItems === 0">
         Preview
       </button>
 
       <button type="button" class="btn print-all-test-btn" (click)="printAllBarcodesTest()">
-        Print ALL (Test)
+        Print ALL
       </button>
 
       <button type="button" class="btn btn-success view-history-btn" (click)="goToHistory()">

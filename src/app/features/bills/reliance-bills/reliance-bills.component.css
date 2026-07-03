@@ -3,7 +3,9 @@ textarea {
   overflow: hidden;
 }
 
-/* Main container */
+/* ================================================================
+   Main container
+   ================================================================ */
 .container {
   max-width: 900px;
   margin: 0 auto;
@@ -13,7 +15,9 @@ textarea {
   color: #2c3e50;
 }
 
-/* Header */
+/* ================================================================
+   Header
+   ================================================================ */
 .header {
   text-align: right;
   margin-bottom: 30px;
@@ -30,33 +34,6 @@ textarea {
   margin: 5px 0;
   font-size: 13px;
   color: #546e7a;
-}
-
-/* Amounts section */
-.amount-in-words {
-  margin-top: 12px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.amounts-section table {
-  border-collapse: collapse;
-  margin-top: 10px;
-  font-size: 12px;
-  width: 250px;
-}
-
-.amounts-section td {
-  border: 1px solid #ccc;
-  padding: 4px 8px;
-}
-
-.terms {
-  margin-top: 15px;
-  font-size: 11px;
-  color: #555;
-  border-top: 1px solid #ccc;
-  padding-top: 6px;
 }
 
 /* Invoice header */
@@ -83,45 +60,40 @@ textarea {
   white-space: nowrap;
 }
 
-.date-control,
-.bill-number-block {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.bold-label {
-  font-weight: bold;
-}
-
-/* Inputs */
+/* ================================================================
+   Inputs
+   ================================================================ */
 input.form-control,
 select.form-control {
   width: 90%;
   padding: 6px 10px;
   font-size: 14px;
+  font-family: inherit;
   margin-top: 5px;
   border: 1px solid #ccd6dd;
   border-radius: 6px;
   background-color: #f7f9fc;
-  transition: border-color 0.3s ease;
+  transition: border-color 0.3s ease, box-shadow 0.15s ease;
   resize: none;
   overflow: hidden;
+  outline: none;
+  box-sizing: border-box;
 }
 
 textarea.form-control {
   width: 90%;
   padding: 6px 10px;
   font-size: 14px;
+  font-family: inherit;
   margin-top: 5px;
   border: 1px solid #ccd6dd;
   border-radius: 6px;
   background-color: #f7f9fc;
-  transition: border-color 0.3s ease;
+  transition: border-color 0.3s ease, box-shadow 0.15s ease;
   resize: horizontal;
   overflow: auto;
+  outline: none;
+  box-sizing: border-box;
 }
 
 input.form-control:focus,
@@ -129,6 +101,7 @@ select.form-control:focus,
 textarea.form-control:focus {
   border-color: #3f51b5;
   background-color: #fff;
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.12);
 }
 
 select.form-control,
@@ -136,7 +109,9 @@ textarea.form-control {
   line-height: 1.4;
 }
 
-/* Table */
+/* ================================================================
+   Table
+   ================================================================ */
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -175,7 +150,28 @@ textarea.form-control {
   background: #f4f6f8;
 }
 
-/* Boxes under the table */
+/* Fix: table inputs should be 100% of cell, not 90% from global rule */
+.table td input.form-control {
+  width: 100%;
+  height: 42px;
+  box-sizing: border-box;
+  margin: 0;
+  display: block;
+}
+
+/* ================================================================
+   Net factor note
+   ================================================================ */
+.net-note {
+  font-size: 11px;
+  color: #9e9e9e;
+  margin: -8px 0 8px 4px;
+  font-style: italic;
+}
+
+/* ================================================================
+   Boxes under the table
+   ================================================================ */
 .boxes.compact {
   display: grid;
   grid-template-columns: 2fr 1fr;
@@ -217,70 +213,15 @@ textarea.form-control {
   text-align: right;
 }
 
-/* Summary */
-.summary {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  font-size: 16px;
-  font-weight: bold;
-  margin-bottom: 12px;
-  gap: 12px;
+.received-section {
+  border-top: 1px solid #e0e0e0;
+  padding-top: 6px;
+  margin-top: 2px;
 }
 
-.summary label {
-  white-space: nowrap;
-}
-
-/* Actions */
-.actions {
-  margin-top: 30px;
-  display: flex;
-  justify-content: flex-start;
-  gap: 15px;
-}
-
-.actions .btn {
-  padding: 12px 24px;
-  font-size: 15px;
-  font-weight: 600;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: background-color .3s ease, transform .2s ease;
-}
-
-.btn-success {
-  background-color: #28a745;
-  color: #fff;
-}
-
-.btn-success:hover {
-  background-color: #218838;
-  transform: translateY(-2px);
-}
-
-.btn-secondary {
-  background-color: #607d8b;
-  color: #fff;
-}
-
-.btn-secondary:hover {
-  background-color: #546e7a;
-  transform: translateY(-2px);
-}
-
-.btn-primary {
-  background-color: #3f51b5;
-  color: #fff;
-}
-
-.btn-primary:hover {
-  background-color: #35449c;
-  transform: translateY(-2px);
-}
-
-/* Parties / details block */
+/* ================================================================
+   Parties / details block
+   ================================================================ */
 .tax-parties {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
@@ -324,7 +265,9 @@ textarea.form-control {
   font-weight: 600;
 }
 
-/* Searchable product field */
+/* ================================================================
+   Searchable product field
+   ================================================================ */
 .product-cell {
   padding: 8px 10px !important;
   vertical-align: middle;
@@ -372,6 +315,7 @@ textarea.form-control {
 
 .product-field input[matInput] {
   font-size: 14px;
+  font-family: inherit;
   color: #2c3e50;
   margin: 0;
   padding: 0;
@@ -380,11 +324,262 @@ textarea.form-control {
 ::ng-deep .mat-mdc-autocomplete-panel {
   border-radius: 10px !important;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12) !important;
+  max-height: 280px !important;
 }
 
-.table td input.form-control {
-  height: 42px;
-  box-sizing: border-box;
-  margin: 0 auto;
-  display: block;
+/* ================================================================
+   Bottom bar (copies, chips, actions)
+   ================================================================ */
+.bottom-bar {
+  margin-top: 30px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.copies-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.copies-input {
+  width: 60px !important;
+  margin-top: 0 !important;
+  display: inline-block !important;
+}
+
+/* Quick-fill email chips */
+.quick-fill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-fill__label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #d1d5db;
+  border-radius: 20px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.5;
+}
+
+.chip:hover {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #3730a3;
+}
+
+.chip--active {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #3730a3;
+  font-weight: 600;
+}
+
+.chip--active:hover {
+  background: #c7d2fe;
+}
+
+/* Actions row */
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.email-input {
+  flex: 1;
+  min-width: 200px;
+  margin-top: 0 !important;
+}
+
+/* ================================================================
+   Buttons
+   ================================================================ */
+.actions-row .btn {
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.15s ease, filter 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn:focus-visible {
+  outline: 2px solid #3f51b5;
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  filter: none !important;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.btn-success:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background-color: #3f51b5;
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: #35449c;
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background-color: #607d8b;
+  color: #fff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background-color: #546e7a;
+  transform: translateY(-1px);
+}
+
+/* ================================================================
+   Spinner
+   ================================================================ */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinner--light {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-right-color: transparent;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ================================================================
+   Responsive
+   ================================================================ */
+@media (max-width: 768px) {
+  .container {
+    padding: 20px 12px;
+  }
+
+  .tax-parties {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .boxes.compact {
+    grid-template-columns: 1fr;
+  }
+
+  .actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .email-input {
+    min-width: 100%;
+  }
+
+  .actions-row .btn {
+    justify-content: center;
+  }
+}
+
+/* ================================================================
+   Print styles
+   ================================================================ */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .container {
+    padding: 0;
+    max-width: 100%;
+    box-shadow: none;
+  }
+
+  .header h1,
+  .header p,
+  .invoice-title,
+  .party-title,
+  .party-name,
+  .party-address,
+  .invoice-details,
+  .box-title,
+  .box-body,
+  .amount-grid {
+    color: #000 !important;
+  }
+
+  .table th {
+    background: #757575 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .table th,
+  .table td {
+    border-color: #333 !important;
+  }
+
+  .total-row {
+    background: #f4f6f8 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .box-title {
+    background: #757575 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

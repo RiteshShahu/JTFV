@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChildren, QueryList, ElementRef } from '@angular/core';
+import { Component, OnInit, ViewChildren, QueryList, ElementRef, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRoute } from '@angular/router';
@@ -24,10 +24,9 @@ type NameWithPrice = Name & { mrp?: number; price?: number; units?: string; name
   templateUrl: './reliance-bills.component.html',
   styleUrls: ['./reliance-bills.component.css']
 })
-export class RelianceBillsComponent implements OnInit {
+export class RelianceBillsComponent implements OnInit, OnDestroy {
   @ViewChildren('productSearchInput') productSearchInputs!: QueryList<ElementRef>;
   @ViewChildren('priceInput') priceInputs!: QueryList<ElementRef>;
-  @ViewChildren('addressTextarea') addressTextareas!: QueryList<ElementRef>;
 
   products: NameWithPrice[] = [];
   namesMap: { [id: number]: string } = {};
@@ -51,25 +50,100 @@ export class RelianceBillsComponent implements OnInit {
   balanceAmount: number = 0;
 
   copiesCount = 1;
-  private isPrinting = false;
-  private isSaving = false;
-  private normalizeBillNumber = (s: string) => {
-    const n = parseInt(String(s || '').trim(), 10);
-    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
-  };
+  isPrinting = false;
+  isSaving = false;
+  isEmailing = false;
+
+  defaultEmails = [
+    'Sunil17.Singh@ril.com',
+    'Vijendra.Anthwal@ril.com',
+    'niraj.shinde@ril.com',
+    'rahul5.patil@ril.com',
+  ];
+
+  private searchTimers = new Map<number, ReturnType<typeof setTimeout>>();
 
   shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
   shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
 
-  private readonly NET_FACTOR = 0.85;
-  private readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
-  private readonly RELIANCE_ADDR =
-    'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
+  private readonly normalizeBillNumber = (s: string) => {
+    const n = parseInt(String(s || '').trim(), 10);
+    return Number.isNaN(n) ? String(s || '').trim() : String(n).padStart(3, '0');
+  };
+
+  /* ---- Static shared constants & helpers (used by static buildRelianceHtml) ---- */
 
   private static readonly NET_FACTOR = 0.85;
   private static readonly RELIANCE_CLIENT = 'Reliance Retail Limited';
   private static readonly RELIANCE_ADDR =
     'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
+
+  private static inr(n: number): string {
+    return (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  private static amountInWords(num: number): string {
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const numToWords = (n: number): string => {
+      if (n < 20) return a[n];
+      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
+      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + numToWords(n % 100) : '');
+      if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
+      if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
+      return '';
+    };
+    const rupees = Math.floor(num);
+    const paise = Math.round((num - rupees) * 100);
+    let words = `${numToWords(rupees)} Rupees`;
+    if (paise > 0) words += ` and ${numToWords(paise)} Paisa`;
+    return words + ' only';
+  }
+
+  private static styles(): string {
+    return `
+      <style>
+        @page { size: A4; margin: 10mm; }
+        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+        body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
+        h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
+        p { margin:5px 0; font-size:13px; color:#546e7a; }
+        .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
+        .tax-parties { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9; margin-bottom:12px; font-size:11px; }
+        .party-title { text-transform:uppercase; font-weight:700; letter-spacing:.4px; margin-bottom:6px; }
+        .party-name { font-weight:600; margin-bottom:4px; }
+        .party-address { line-height:1.45; }
+        .invoice-details .inv-row { display:flex; justify-content:space-between; margin-bottom:6px; white-space:nowrap; }
+        .invoice-details .value { font-weight:600; }
+        table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
+        th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
+        th { background:#757575 !important; color:#fff !important; font-weight:700; }
+        .total-row { background:#f4f6f8 !important; font-weight:700; }
+        .left { text-align:left; }
+        thead { display: table-header-group; }
+        .no-repeat { page-break-inside: avoid; }
+        .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; }
+        .left-column { display:flex; flex-direction:column; gap:8px; }
+        .box { border:1px solid #bdbdbd; }
+        .box-title { background:#757575 !important; color:#fff !important; font-weight:700; padding:6px 8px; font-size:12px; }
+        .box-body { padding:6px 8px; font-size:12px; }
+        .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
+        .amount-grid .v { text-align:right; }
+        .page { page-break-after: always; }
+        .page:last-child { page-break-after: auto; }
+      </style>
+    `;
+  }
+
+  /* ---- Instance wrappers delegating to static ---- */
+
+  /** Template-bound wrapper */
+  amountInWords(num: number): string {
+    return RelianceBillsComponent.amountInWords(num);
+  }
+
+  /* ---- Constructor ---- */
 
   constructor(
     private titleService: Title,
@@ -79,6 +153,8 @@ export class RelianceBillsComponent implements OnInit {
     private toast: ToastService,
     private http: HttpClient
   ) { }
+
+  /* ---- Lifecycle ---- */
 
   ngOnInit(): void {
     this.titleService.setTitle('Invoice - J.T. Fruits & Vegetables');
@@ -116,6 +192,38 @@ export class RelianceBillsComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    this.searchTimers.forEach((timer) => clearTimeout(timer));
+    this.searchTimers.clear();
+  }
+
+  /* ---- Email chips ---- */
+
+  isEmailAdded(email: string): boolean {
+    return this.manualEmail
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .includes(email.toLowerCase());
+  }
+
+  addEmail(email: string): void {
+    const current = this.manualEmail
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (current.some((e) => e.toLowerCase() === email.toLowerCase())) {
+      const filtered = current.filter((e) => e.toLowerCase() !== email.toLowerCase());
+      this.manualEmail = filtered.join(', ');
+      return;
+    }
+
+    current.push(email);
+    this.manualEmail = current.join(', ');
+  }
+
+  /* ---- Row helpers ---- */
+
   private createEmptyBillItem(): BillItem {
     return {
       productId: null,
@@ -135,6 +243,8 @@ export class RelianceBillsComponent implements OnInit {
       .join(', ');
   }
 
+  /* ---- Product search & selection ---- */
+
   displayProductOption(product: NameWithPrice): string {
     return `${product.name}${product.units ? ' ' + product.units : ''}`.trim();
   }
@@ -152,6 +262,19 @@ export class RelianceBillsComponent implements OnInit {
   }
 
   filterProducts(index: number): void {
+    const existing = this.searchTimers.get(index);
+    if (existing) clearTimeout(existing);
+
+    this.searchTimers.set(
+      index,
+      setTimeout(() => {
+        this.performFilter(index);
+        this.searchTimers.delete(index);
+      }, 150)
+    );
+  }
+
+  private performFilter(index: number): void {
     const item = this.billItems[index];
     const rawSearch = item.searchText || '';
     const search = this.normalizeText(rawSearch);
@@ -183,6 +306,12 @@ export class RelianceBillsComponent implements OnInit {
 
   tryAutoSelectClosest(index: number): void {
     const item = this.billItems[index];
+
+    // Guard: if already selected and text matches, skip
+    if (item.productId && item.searchText?.trim() === item.productName?.trim()) {
+      return;
+    }
+
     const rawSearch = item.searchText || '';
     const search = this.normalizeText(rawSearch);
     const compactSearch = this.normalizeCompact(rawSearch);
@@ -229,9 +358,11 @@ export class RelianceBillsComponent implements OnInit {
     this.calculateRowTotal(index);
   }
 
+  /* ---- Ship To ---- */
+
   private ensureRelianceDefaults(): void {
-    if (!this.clientName?.trim()) this.clientName = this.RELIANCE_CLIENT;
-    if (!this.address?.trim()) this.address = this.RELIANCE_ADDR;
+    if (!this.clientName?.trim()) this.clientName = RelianceBillsComponent.RELIANCE_CLIENT;
+    if (!this.address?.trim()) this.address = RelianceBillsComponent.RELIANCE_ADDR;
     if (!this.shipToName?.trim()) this.shipToName = 'FRESHPIK SPECTRA POWAI ( T5EP )';
     if (!this.shipToAddress?.trim()) this.shipToAddress = 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
   }
@@ -250,11 +381,15 @@ export class RelianceBillsComponent implements OnInit {
     this.shipToAddress = this.buildClientAddress(c);
   }
 
+  /* ---- Load for edit ---- */
+
   loadBillForEdit(billNumber: string): void {
     this.http.get<any>(`http://localhost:3001/api/bills/${billNumber}`).subscribe({
       next: bill => {
-        this.clientName = bill.clientName || this.clientName;
-        this.address = bill.address || this.address;
+        this.shipToName = bill.clientName || this.shipToName;
+        this.shipToAddress = bill.address || this.shipToAddress;
+        this.clientName = RelianceBillsComponent.RELIANCE_CLIENT;
+        this.address = RelianceBillsComponent.RELIANCE_ADDR;
         this.billNumber = bill.billNumber || billNumber;
         this.billDate = bill.billDate || this.billDate;
         this.totalAmount = Number(bill.totalAmount ?? 0);
@@ -298,10 +433,6 @@ export class RelianceBillsComponent implements OnInit {
         }
 
         this.calculateTotalAmount();
-
-        setTimeout(() => {
-          this.addressTextareas?.forEach(t => this.resizeTextarea(t.nativeElement));
-        });
       },
       error: err => {
         console.error('Failed to load bill for edit:', err);
@@ -310,6 +441,8 @@ export class RelianceBillsComponent implements OnInit {
     });
   }
 
+  /* ---- Calculations ---- */
+
   onPriceKeydown(event: KeyboardEvent, index: number): void {
     if (event.key === 'Tab' && !event.shiftKey) {
       event.preventDefault();
@@ -317,36 +450,14 @@ export class RelianceBillsComponent implements OnInit {
       if (index === this.billItems.length - 1) {
         this.billItems.push(this.createEmptyBillItem());
         setTimeout(() => {
-          const productInputArray = this.productSearchInputs.toArray();
-          productInputArray[index + 1]?.nativeElement?.focus();
+          const arr = this.productSearchInputs.toArray();
+          arr[index + 1]?.nativeElement?.focus();
         }, 0);
       } else {
-        const productInputArray = this.productSearchInputs.toArray();
-        productInputArray[index + 1]?.nativeElement?.focus();
+        const arr = this.productSearchInputs.toArray();
+        arr[index + 1]?.nativeElement?.focus();
       }
     }
-  }
-
-  onProductChange(index: number): void {
-    const item = this.billItems[index];
-    const selectedId = item.productId ?? undefined;
-    const selectedProduct = this.products.find(p => p.id === selectedId);
-
-    if (selectedProduct) {
-      item.productName = this.displayProductOption(selectedProduct);
-      item.searchText = this.displayProductOption(selectedProduct);
-
-      const dbPrice =
-        this.priceMap[selectedId as number] ??
-        Number((selectedProduct as any).mrp ?? (selectedProduct as any).price ?? 0);
-      item.price = Number(dbPrice || 0);
-    } else {
-      item.productName = '(Unknown)';
-      item.searchText = '';
-      item.price = 0;
-    }
-
-    this.calculateRowTotal(index);
   }
 
   calculateRowTotal(index: number): void {
@@ -355,10 +466,10 @@ export class RelianceBillsComponent implements OnInit {
     const price = Number(it.price || 0);
 
     if (!it.manualTotal) {
-      it.total = +((qty * price) * this.NET_FACTOR).toFixed(2);
+      it.total = +((qty * price) * RelianceBillsComponent.NET_FACTOR).toFixed(2);
     } else {
       if (qty > 0 && isFinite(qty)) {
-        it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+        it.price = +((Number(it.total || 0) / (qty * RelianceBillsComponent.NET_FACTOR))).toFixed(2);
       }
     }
     this.calculateTotalAmount();
@@ -371,7 +482,7 @@ export class RelianceBillsComponent implements OnInit {
     const qty = Number(it.quantity || 0);
     const netTotal = Number(it.total || 0);
     if (qty > 0 && isFinite(qty)) {
-      it.price = +((netTotal / (qty * this.NET_FACTOR))).toFixed(2);
+      it.price = +((netTotal / (qty * RelianceBillsComponent.NET_FACTOR))).toFixed(2);
     }
     this.calculateTotalAmount();
   }
@@ -384,9 +495,9 @@ export class RelianceBillsComponent implements OnInit {
       const price = Number(it.price || 0);
 
       if (!it.manualTotal) {
-        it.total = +((qty * price) * this.NET_FACTOR).toFixed(2);
+        it.total = +((qty * price) * RelianceBillsComponent.NET_FACTOR).toFixed(2);
       } else if (qty > 0 && isFinite(qty)) {
-        it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+        it.price = +((Number(it.total || 0) / (qty * RelianceBillsComponent.NET_FACTOR))).toFixed(2);
       }
     });
 
@@ -397,101 +508,12 @@ export class RelianceBillsComponent implements OnInit {
     this.balanceAmount = +(this.totalAmount - (this.receivedAmount || 0)).toFixed(2);
   }
 
-  amountInWords(num: number): string {
-    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
-      'Eighteen', 'Nineteen'];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-
-    const numToWords = (n: number): string => {
-      if (n < 20) return a[n];
-      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
-      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + numToWords(n % 100) : '');
-      if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
-      if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
-      return '';
-    };
-
-    const rupees = Math.floor(num);
-    const paise = Math.round((num - rupees) * 100);
-    let words = `${numToWords(rupees)} Rupees`;
-    if (paise > 0) words += ` and ${numToWords(paise)} Paisa`;
-    return words + ' only';
-  }
-
-  private static inr(n: number): string {
-    return (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  private static amountInWords(num: number): string {
-    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
-      'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
-    const numToWords = (n: number): string => {
-      if (n < 20) return a[n];
-      if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
-      if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' and ' + numToWords(n % 100) : '');
-      if (n < 100000) return numToWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + numToWords(n % 1000) : '');
-      if (n < 10000000) return numToWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + numToWords(n % 100000) : '');
-      return '';
-    };
-    const rupees = Math.floor(num);
-    const paise = Math.round((num - rupees) * 100);
-    let words = `${numToWords(rupees)} Rupees`;
-    if (paise > 0) words += ` and ${numToWords(paise)} Paisa`;
-    return words + ' only';
-  }
+  /* ---- Print HTML builders ---- */
 
   private displayName(it: BillItem): string {
     const prod = this.products.find(p => p.id === it.productId);
     if (prod) return prod.name + (prod.units ? ' ' + prod.units : '');
     return it.productName || '';
-  }
-
-  private fmt(n: number): string {
-    return (n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  }
-
-  private getInvoiceStyles(): string {
-    return `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
-        body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
-        h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
-        p { margin:5px 0; font-size:13px; color:#546e7a; }
-
-        .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
-        .tax-parties {
-          display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px;
-          padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9; margin-bottom:12px; font-size:11px;
-        }
-        .party-title { text-transform:uppercase; font-weight:700; letter-spacing:.4px; margin-bottom:6px; }
-        .party-name { font-weight:600; margin-bottom:4px; }
-        .party-address { line-height:1.45; }
-        .invoice-details .inv-row { display:flex; justify-content:space-between; margin-bottom:6px; white-space:nowrap; }
-        .invoice-details .value { font-weight:600; }
-
-        table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
-        th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
-        th { background:#757575 !important; color:#fff !important; font-weight:700; }
-        .total-row { background:#f4f6f8 !important; font-weight:700; }
-        .left { text-align:left; }
-        thead { display: table-header-group; }
-        .no-repeat { page-break-inside: avoid; }
-
-        .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; }
-        .left-column { display:flex; flex-direction:column; gap:8px; }
-        .box { border:1px solid #bdbdbd; }
-        .box-title { background:#757575 !important; color:#fff !important; font-weight:700; padding:6px 8px; font-size:12px; }
-        .box-body { padding:6px 8px; font-size:12px; }
-        .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
-        .amount-grid .v { text-align:right; }
-
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>
-    `;
   }
 
   private buildInvoiceBody(validItems: BillItem[]): string {
@@ -502,8 +524,8 @@ export class RelianceBillsComponent implements OnInit {
         <td>${i + 1}</td>
         <td>${this.displayName(it)}</td>
         <td>${it.quantity ?? 0}</td>
-        <td>₹ ${this.fmt(it.price ?? 0)}</td>
-        <td>₹ ${this.fmt(it.total ?? 0)}</td>
+        <td>₹ ${RelianceBillsComponent.inr(it.price ?? 0)}</td>
+        <td>₹ ${RelianceBillsComponent.inr(it.total ?? 0)}</td>
       </tr>
     `).join('');
 
@@ -511,8 +533,8 @@ export class RelianceBillsComponent implements OnInit {
       <tr class="total-row no-repeat">
         <td colspan="2" class="left"><strong>Total</strong></td>
         <td><strong>${this.totalQuantity}</strong></td>
-        <td><strong>₹ ${this.fmt(totalUnitPrice)}</strong></td>
-        <td><strong>₹ ${this.fmt(this.totalAmount)}</strong></td>
+        <td><strong>₹ ${RelianceBillsComponent.inr(totalUnitPrice)}</strong></td>
+        <td><strong>₹ ${RelianceBillsComponent.inr(this.totalAmount)}</strong></td>
       </tr>
     `;
 
@@ -521,7 +543,7 @@ export class RelianceBillsComponent implements OnInit {
         <div class="left-column">
           <div class="box">
             <div class="box-title">Invoice Amount In Words</div>
-            <div class="box-body">${this.amountInWords(this.totalAmount)}</div>
+            <div class="box-body">${RelianceBillsComponent.amountInWords(this.totalAmount)}</div>
           </div>
           <div class="box">
             <div class="box-title">Terms and conditions</div>
@@ -534,10 +556,8 @@ export class RelianceBillsComponent implements OnInit {
         <div class="box">
           <div class="box-title">Amounts</div>
           <div class="amount-grid">
-            <div>Sub Total</div><div class="v">₹ ${this.fmt(this.totalAmount)}</div>
-            <div><strong>Total</strong></div><div class="v"><strong>₹ ${this.fmt(this.totalAmount)}</strong></div>
-            <div>Received</div><div class="v">₹ ${this.fmt(this.receivedAmount || 0)}</div>
-            <div>Balance</div><div class="v">₹ ${this.fmt(this.balanceAmount)}</div>
+            <div>Sub Total</div><div class="v">₹ ${RelianceBillsComponent.inr(this.totalAmount)}</div>
+            <div><strong>Total</strong></div><div class="v"><strong>₹ ${RelianceBillsComponent.inr(this.totalAmount)}</strong></div>
           </div>
         </div>
       </div>
@@ -556,8 +576,8 @@ export class RelianceBillsComponent implements OnInit {
       <div class="tax-parties">
         <div class="party">
           <div class="party-title">Bill To</div>
-          <div class="party-name">${this.clientName || this.RELIANCE_CLIENT}</div>
-          <div class="party-address">${this.address || this.RELIANCE_ADDR}</div>
+          <div class="party-name">${this.clientName || RelianceBillsComponent.RELIANCE_CLIENT}</div>
+          <div class="party-address">${this.address || RelianceBillsComponent.RELIANCE_ADDR}</div>
         </div>
         <div class="party">
           <div class="party-title">Ship To</div>
@@ -586,13 +606,13 @@ export class RelianceBillsComponent implements OnInit {
   }
 
   private buildPrintHtml(validItems: BillItem[]): string {
-    const styles = this.getInvoiceStyles();
+    const styles = RelianceBillsComponent.styles();
     const body = this.buildInvoiceBody(validItems);
     return `<!doctype html><html><head><meta charset="utf-8">${styles}</head><body>${body}</body></html>`;
   }
 
   private buildPrintHtmlMulti(validItems: BillItem[], copies: number): string {
-    const styles = this.getInvoiceStyles();
+    const styles = RelianceBillsComponent.styles();
     const body = this.buildInvoiceBody(validItems);
     const pages = Array.from({ length: Math.max(1, copies) }, () => `<div class="page">${body}</div>`).join('\n');
 
@@ -603,6 +623,8 @@ export class RelianceBillsComponent implements OnInit {
         <body>${pages}</body>
       </html>`;
   }
+
+  /* ---- Actions ---- */
 
   async printBill(): Promise<void> {
     if (this.isPrinting) return;
@@ -626,10 +648,10 @@ export class RelianceBillsComponent implements OnInit {
           const qty = Number(it.quantity || 0);
           if (it.manualTotal) {
             if (qty > 0 && isFinite(qty)) {
-              it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+              it.price = +((Number(it.total || 0) / (qty * RelianceBillsComponent.NET_FACTOR))).toFixed(2);
             }
           } else {
-            it.total = +((qty * Number(it.price || 0)) * this.NET_FACTOR).toFixed(2);
+            it.total = +((qty * Number(it.price || 0)) * RelianceBillsComponent.NET_FACTOR).toFixed(2);
           }
           return it;
         });
@@ -689,6 +711,7 @@ export class RelianceBillsComponent implements OnInit {
   }
 
   emailBill(): void {
+    if (this.isEmailing) return;
     this.ensureRelianceDefaults();
 
     const validItems = this.billItems.filter(
@@ -718,10 +741,10 @@ export class RelianceBillsComponent implements OnInit {
       const qty = Number(it.quantity || 0);
       if (it.manualTotal) {
         if (qty > 0 && isFinite(qty)) {
-          it.price = +((Number(it.total || 0) / (qty * this.NET_FACTOR))).toFixed(2);
+          it.price = +((Number(it.total || 0) / (qty * RelianceBillsComponent.NET_FACTOR))).toFixed(2);
         }
       } else {
-        it.total = +((qty * Number(it.price || 0)) * this.NET_FACTOR).toFixed(2);
+        it.total = +((qty * Number(it.price || 0)) * RelianceBillsComponent.NET_FACTOR).toFixed(2);
       }
       const prod = this.products.find(p => p.id === it.productId);
       it.productName = prod ? prod.name + (prod.units ? ' ' + prod.units : '') : (it.productName || '');
@@ -734,8 +757,8 @@ export class RelianceBillsComponent implements OnInit {
     const pdfHtml = this.buildPrintHtml(normalized);
 
     const billData = {
-      clientName: this.clientName,
-      address: this.address,
+      clientName: this.shipToName || this.clientName,
+      address: this.shipToAddress || this.address,
       billNumber: this.billNumber,
       billDate: this.billDate,
       totalAmount: this.totalAmount,
@@ -745,11 +768,14 @@ export class RelianceBillsComponent implements OnInit {
       pdfHtml
     };
 
+    this.isEmailing = true;
     this.billsService.sendBillByEmail(billData).subscribe({
-      next: () => this.toast.success('Email sent successfully'),
+      next: () => {
+        this.toast.success('Email sent successfully');
+        this.isEmailing = false;
+      },
       error: (err) => {
         console.error('Email failed:', err);
-
         let message =
           err?.error?.details ||
           err?.error?.message ||
@@ -760,12 +786,14 @@ export class RelianceBillsComponent implements OnInit {
           message = 'PDF engine not found. Please install Google Chrome or Microsoft Edge.';
         }
         this.toast.error(message);
+        this.isEmailing = false;
       }
     });
   }
 
-  saveBill(): void {
+  async saveBill(): Promise<void> {
     this.ensureRelianceDefaults();
+
     const active = document.activeElement as HTMLElement | null;
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) active.blur();
 
@@ -786,24 +814,36 @@ export class RelianceBillsComponent implements OnInit {
       }));
 
     const payload: any = {
-      clientName: this.clientName || '',
-      address: this.address || '',
+      clientName: this.shipToName || this.clientName,
+      address: this.shipToAddress || this.address,
       billNumber: targetNo,
       billDate: this.billDate || '',
       totalAmount: Number(this.totalAmount) || 0,
+      finalAmount: Number(this.totalAmount) || 0,
       billItems: sanitizedItems,
       billType: 'reliance'
     };
 
     this.billsService.billExists(targetNo).subscribe({
-      next: exists => {
+      next: async (exists) => {
         if (exists) {
-          this.toast.warn(`Bill ${targetNo} is already saved.`);
-          this.isSaving = false;
-          return;
+          const overwrite = await this.toast.confirm({
+            message: `Bill ${targetNo} already exists. Overwrite?`,
+            type: 'warn',
+            okText: 'Overwrite',
+            cancelText: 'Cancel',
+          });
+          if (!overwrite) {
+            this.isSaving = false;
+            return;
+          }
         }
+
         (this.billsService as any).saveBill?.(payload).subscribe({
-          next: () => { this.toast.success('Bill saved successfully!'); this.isSaving = false; },
+          next: () => {
+            this.toast.success('Bill saved successfully!');
+            this.isSaving = false;
+          },
           error: (e: any) => {
             console.error('Error saving bill:', e);
             this.toast.error('Failed to save bill.');
@@ -818,25 +858,7 @@ export class RelianceBillsComponent implements OnInit {
     });
   }
 
-  autoResize(event: Event): void {
-    const textarea = event.target as HTMLTextAreaElement;
-    textarea.style.height = 'auto';
-    textarea.style.height = textarea.scrollHeight + 'px';
-  }
-
-  private resizeTextarea(el: HTMLTextAreaElement): void {
-    el.style.height = 'auto';
-    el.style.width = 'auto';
-    const containerWidth = el.parentElement?.clientWidth || 800;
-    const scrollWidth = el.scrollWidth + 2;
-    if (scrollWidth < containerWidth) {
-      el.style.width = scrollWidth + 'px';
-      el.style.height = '60px';
-    } else {
-      el.style.width = '100%';
-      el.style.height = el.scrollHeight + 'px';
-    }
-  }
+  /* ---- Print utilities ---- */
 
   private async printHtmlInHiddenIframe(html: string): Promise<void> {
     const iframe = document.createElement('iframe');
@@ -881,40 +903,11 @@ export class RelianceBillsComponent implements OnInit {
     }
   }
 
-  private static styles(): string {
-    return `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
-        body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
-        h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
-        p { margin:5px 0; font-size:13px; color:#546e7a; }
-        .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
-        .tax-parties { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px; padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9; margin-bottom:12px; font-size:11px; }
-        .party-title { text-transform:uppercase; font-weight:700; letter-spacing:.4px; margin-bottom:6px; }
-        .party-name { font-weight:600; margin-bottom:4px; }
-        .party-address { line-height:1.45; }
-        .invoice-details .inv-row { display:flex; justify-content:space-between; margin-bottom:6px; white-space:nowrap; }
-        .invoice-details .value { font-weight:600; }
-        table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
-        th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
-        th { background:#757575 !important; color:#fff !important; font-weight:700; }
-        .total-row { background:#f4f6f8 !important; font-weight:700; }
-        .left { text-align:left; }
-        thead { display: table-header-group; }
-        .no-repeat { page-break-inside: avoid; }
-        .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; }
-        .left-column { display:flex; flex-direction:column; gap:8px; }
-        .box { border:1px solid #bdbdbd; }
-        .box-title { background:#757575 !important; color:#fff !important; font-weight:700; padding:6px 8px; font-size:12px; }
-        .box-body { padding:6px 8px; font-size:12px; }
-        .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
-        .amount-grid .v { text-align:right; }
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>
-    `;
+  private htmlToDataUrl(html: string): string {
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }
+
+  /* ---- Static method for external use (e.g. backend PDF generation) ---- */
 
   static buildRelianceHtml(payload: {
     billNumber: string;
@@ -1025,10 +1018,6 @@ export class RelianceBillsComponent implements OnInit {
     const page = `<div class="page">${body}</div>`;
     const pages = Array.from({ length: copies }).map(() => page).join('');
 
-    return `<!doctype html><html><head><meta charset="utf-8">${this.styles()}<title>Invoice ${payload.billNumber}</title></head><body>${pages}</body></html>`;
-  }
-
-  private htmlToDataUrl(html: string): string {
-    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+    return `<!doctype html><html><head><meta charset="utf-8">${RelianceBillsComponent.styles()}<title>Invoice ${payload.billNumber}</title></head><body>${pages}</body></html>`;
   }
 }

@@ -3,10 +3,11 @@
 <div class="container pc-container">
   <h2 class="page-title">Price Change Sheet</h2>
 
-  <div class="email-box card">
+  <div class="email-box card no-print">
     <label class="field">
       <span class="label">To (comma separated):</span>
-      <input type="text" class="form-control" [(ngModel)]="toList" placeholder="niraj@..., sunil@..." />
+      <input type="text" class="form-control" [(ngModel)]="toList" autocomplete="email"
+        placeholder="niraj@..., sunil@..." />
     </label>
     <label class="field">
       <span class="label">Subject:</span>
@@ -18,25 +19,31 @@
     </label>
   </div>
 
-  <small style="margin-left:8px;color:#666;">	Sunil17.Singh@ril.com, Vijendra.Anthwal@ril.com, niraj.shinde@ril.com </small>
-  
+  <div class="quick-fill no-print">
+    <span class="quick-fill__label">Quick add:</span>
+    <button type="button" class="chip" *ngFor="let email of defaultEmails" (click)="addEmail(email)"
+      [class.chip--active]="isEmailAdded(email)">
+      {{ email }}
+    </button>
+  </div>
+
   <div class="table-wrap card">
     <table class="table grid">
       <thead>
         <tr>
-          <th style="width:64px;">No</th>
-          <th style="width:160px;">Material</th>
+          <th style="width:48px;">No</th>
+          <th style="width:140px;">Barcode</th>
           <th>Product</th>
-          <th style="width:140px;">Old Price</th>
-          <th style="width:160px;">Selling Price</th>
-          <th style="width:200px;">Cost Price</th>
-          <th style="width:120px;">Margin (%)</th>
-          <th style="width:110px;"></th>
+          <th style="width:110px;">Current MRP</th>
+          <th style="width:180px;">New Price</th>
+          <th style="width:130px;">Cost Price</th>
+          <th style="width:100px;">Margin %</th>
+          <th style="width:120px;" class="no-print"></th>
         </tr>
       </thead>
 
       <tbody>
-        <tr *ngFor="let r of rows; let i = index">
+        <tr *ngFor="let r of rows; let i = index" [class.row-invalid]="!isRowValid(r)">
           <td>{{ i + 1 }}</td>
 
           <td>
@@ -44,54 +51,93 @@
           </td>
 
           <td class="product-cell">
-            <select #productSelect class="form-control"
-                    [(ngModel)]="r.productId"
-                    (change)="onProductChange(r)">
-              <option [ngValue]="null">Select</option>
-              <option *ngFor="let p of products" [ngValue]="p.id">
-                {{ p.name }}{{ p.units ? ' ' + p.units : '' }}
-              </option>
-            </select>
+            <mat-form-field appearance="outline" class="product-field">
+              <input #productSearchInput matInput type="text" name="productSearch{{ i }}" [(ngModel)]="r.searchText"
+                [matAutocomplete]="auto" (input)="filterProducts(i)" (blur)="tryAutoSelectClosest(i)"
+                placeholder="Type Product Name" />
+
+              <mat-autocomplete #auto="matAutocomplete">
+                <mat-option *ngFor="let p of r.filteredProducts" [value]="displayProductOption(p)"
+                  (onSelectionChange)="onProductOptionSelected(i, p, $event)">
+                  {{ p.name }}{{ p.units ? ' ' + p.units : '' }}
+                </mat-option>
+              </mat-autocomplete>
+            </mat-form-field>
           </td>
 
           <td>
             <input type="number" class="form-control" [value]="r.oldPrice ?? ''" disabled />
           </td>
 
-          <td>
-            <input #newPriceInput
-              type="number"
-              min="0" step="0.01"
-              class="form-control"
-              [(ngModel)]="r.newPrice"
-              (keydown)="onNewPriceKeydown($event, i)"
-              placeholder="0.00" />
+          <td class="price-cell">
+            <input #newPriceInput type="number" min="0" step="0.01" class="form-control" [(ngModel)]="r.newPrice"
+              (keydown)="onNewPriceKeydown($event, i)" placeholder="0.00" />
+            <span *ngIf="getPriceChange(r) as pc" class="price-change" [class.up]="pc.direction === 'up'"
+              [class.down]="pc.direction === 'down'">
+              {{ pc.direction === 'up' ? '+' : '' }}{{ pc.diff | number:'1.2-2' }}
+              ({{ pc.direction === 'up' ? '+' : '' }}{{ pc.percent | number:'1.1-1' }}%)
+            </span>
           </td>
 
           <td class="mono">
             {{ r.newPrice ? (r.newPrice * (1 - (r.margin ?? 15) / 100) | number:'1.2-2') : '' }}
           </td>
 
-          <!-- NEW Margin input -->
           <td>
-            <input type="number" class="form-control"
-                  min="0" step="0.1"
-                  [(ngModel)]="r.margin"
-                  placeholder="15" />
+            <input type="number" class="form-control" min="0" max="100" step="0.1" [(ngModel)]="r.margin"
+              placeholder="15" />
           </td>
 
-          <td class="right">
-            <button class="btn btn-danger" (click)="removeRow(i)">Delete</button>
+          <td class="actions-cell no-print">
+            <button type="button" class="btn-icon" (click)="duplicateRow(i)" title="Duplicate row"
+              aria-label="Duplicate row">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            </button>
+            <button type="button" class="btn-danger" (click)="removeRow(i)" aria-label="Delete row">
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
 
-    <div class="row-actions">
-      <button class="btn" (click)="addRow()">+ Add Row</button>
-      <div class="spacer"></div>
-      <button class="btn" (click)="downloadExcel()">Export to Excel</button>
-      <button class="btn primary" (click)="sendEmail()">Send Email</button>
+    <div class="summary-bar no-print">
+      <span>{{ validCount }} valid item(s)</span>
+      <span *ngIf="invalidCount > 0" class="summary-bar__warn">
+        {{ invalidCount }} incomplete
+      </span>
+      <span *ngIf="validCount > 0" class="summary-bar__info">
+        Avg margin: {{ avgMargin | number:'1.1-1' }}%
+      </span>
     </div>
+
+    <div class="row-actions no-print">
+      <button type="button" class="btn" (click)="addRow()" [disabled]="isBuilding || isEmailing">
+        Add Row
+      </button>
+      <button type="button" class="btn" (click)="clearAllRows()"
+        [disabled]="isBuilding || isEmailing || rows.length <= 1">
+        Clear All
+      </button>
+      <div class="spacer"></div>
+      <button type="button" class="btn" (click)="downloadExcel()" [disabled]="isBuilding || isEmailing">
+        <span *ngIf="isBuilding" class="spinner"></span>
+        Export to Excel
+      </button>
+      <button type="button" class="btn primary" (click)="sendEmail()"
+        [disabled]="isBuilding || isEmailing || !validCount">
+        <span *ngIf="isEmailing" class="spinner spinner--light"></span>
+        Send Email
+      </button>
+    </div>
+  </div>
+
+  <div class="shortcut-hint no-print">
+    <kbd>Tab</kbd> from New Price &rarr; next row &nbsp;&bull;&nbsp;
+    <kbd>Ctrl</kbd>+<kbd>Enter</kbd> &rarr; Send Email
   </div>
 </div>

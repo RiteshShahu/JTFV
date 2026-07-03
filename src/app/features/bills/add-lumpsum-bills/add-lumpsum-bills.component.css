@@ -1,4 +1,6 @@
-/* === BASE CONTAINER === */
+/* ================================================================
+   Base container
+   ================================================================ */
 .container {
   max-width: 950px;
   margin: 0 auto;
@@ -8,7 +10,9 @@
   color: #2c3e50;
 }
 
-/* === HEADER (Shop lines) === */
+/* ================================================================
+   Header
+   ================================================================ */
 .top-section {
   text-align: center;
   margin-bottom: 12px;
@@ -29,7 +33,6 @@
   margin: 2px 0;
 }
 
-/* === TAX FREE INVOICE (centered) === */
 .invoice-title {
   text-align: center;
   font-size: 18px;
@@ -38,17 +41,17 @@
   margin: 14px 0 10px;
 }
 
-/* === TWO-COLUMN ROW: LEFT(Name/Address) | RIGHT(Bill No/Date/Amount) === */
+/* ================================================================
+   Two-column info grid
+   ================================================================ */
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 320px;
-  /* left grows, right fixed */
   align-items: start;
   gap: 16px 24px;
   margin-bottom: 12px;
 }
 
-/* Left column: flat lines like NAME : VALUE, ADDRESS : VALUE */
 .left-info .line {
   display: flex;
   gap: 8px;
@@ -61,7 +64,6 @@
   font-family: "Consolas", "Roboto Mono", "Liberation Mono", monospace;
   font-size: 16px;
   letter-spacing: 1px;
-  /* spacing makes each digit clearer */
 }
 
 .left-info label {
@@ -69,28 +71,41 @@
   white-space: nowrap;
 }
 
-/* Right column: stacked meta, right-aligned */
 .right-meta .meta {
   display: flex;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   font-size: 14px;
 }
 
 .right-meta label {
-  font-weight: 700;
+  font-weight: 600;
+  min-width: 65px;
+  text-align: right;
   white-space: nowrap;
 }
 
-/* === FORM CONTROLS (edit mode) === */
+/* ================================================================
+   Form controls
+   ================================================================ */
 .form-control {
   padding: 6px 10px;
   font-size: 14px;
+  font-family: inherit;
   border: 1px solid #ccd6dd;
   border-radius: 4px;
   background: #f7f9fc;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.15s ease;
+}
+
+.form-control:focus {
+  border-color: #3f51b5;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.12);
 }
 
 .bill-control {
@@ -104,14 +119,68 @@ select.form-control.client-select {
 
 textarea.form-control.address-area {
   width: 280px;
-  /* 👈 decrease width (adjust as needed) */
   resize: horizontal;
   min-height: 40px;
-  /* slightly taller for readability */
   line-height: 1.35;
 }
 
-/* === SUMMARY (unchanged) === */
+.right-meta input.form-control,
+.right-meta input[type="date"],
+.right-meta input[type="number"] {
+  padding: 6px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  border: 1px solid #ccd6dd;
+  border-radius: 4px;
+  background: #f7f9fc;
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.15s ease;
+  outline: none;
+  width: 140px;
+  box-sizing: border-box;
+}
+
+.right-meta input:focus {
+  border-color: #3f51b5;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(63, 81, 181, 0.12);
+}
+
+/* ================================================================
+   Description
+   ================================================================ */
+.description-container {
+  text-align: center;
+  margin: 16px 0 22px;
+}
+
+.description-container textarea.form-control {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  margin-bottom: 0;
+  font-family: inherit;
+}
+
+.description-print {
+  display: none;
+  margin: 0 auto;
+  padding: 8px 14px;
+  border: 1px solid #d8d8d8;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.45;
+  max-width: 85%;
+  white-space: pre-line;
+  word-break: break-word;
+  text-align: center;
+  color: #2c3e50;
+}
+
+/* ================================================================
+   Summary footer
+   ================================================================ */
 .print-summary-footer {
   margin-top: 30px;
   border-top: 1px solid #e0e0e0;
@@ -150,59 +219,141 @@ textarea.form-control.address-area {
   font-weight: normal;
 }
 
-/* === META INFO (unchanged) === */
-/* Right column meta box styling */
-.right-meta .meta {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-  font-size: 14px;
+.grand-total-row .grand-total {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a1a;
 }
 
-.right-meta label {
-  font-weight: 600;
-  min-width: 65px;
+.words-line {
+  font-size: 13px;
+  font-style: italic;
+  color: #555;
+  margin-top: 4px;
+}
+
+.words-line div {
   text-align: right;
 }
 
-/* Make inputs consistent with left side controls */
-.right-meta input.form-control,
-.right-meta input[type="date"],
-.right-meta input[type="number"] {
-  padding: 6px 10px;
-  font-size: 14px;
-  border: 1px solid #ccd6dd;
-  border-radius: 4px;
-  background: #f7f9fc;
-  transition: border-color 0.3s ease;
-  width: 140px;
-  /* fixed size for neatness */
-}
-
-.right-meta input:focus {
-  border-color: #3f51b5;
-  background-color: #ffffff;
-}
-
-/* === ACTION BUTTONS (unchanged) === */
-.actions {
+/* ================================================================
+   Bottom bar
+   ================================================================ */
+.bottom-bar {
   margin-top: 30px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.bottom-row {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
 }
 
-.actions .btn {
+.copies-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.copies-input {
+  width: 60px !important;
+  margin-top: 0 !important;
+  display: inline-block !important;
+}
+
+/* Quick-fill email chips */
+.quick-fill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-fill__label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #d1d5db;
+  border-radius: 20px;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.5;
+}
+
+.chip:hover {
+  background: #e0e7ff;
+  border-color: #818cf8;
+  color: #3730a3;
+}
+
+.chip--active {
+  background: #e0e7ff;
+  border-color: #6366f1;
+  color: #3730a3;
+  font-weight: 600;
+}
+
+.chip--active:hover {
+  background: #c7d2fe;
+}
+
+/* Actions row */
+.actions-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.email-input {
+  flex: 1;
+  min-width: 200px;
+  margin-top: 0 !important;
+}
+
+/* ================================================================
+   Buttons
+   ================================================================ */
+.actions-row .btn {
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
+  font-family: inherit;
   border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: background-color 0.2s ease, transform 0.15s ease, filter 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn:focus-visible {
+  outline: 2px solid #3f51b5;
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  filter: none !important;
 }
 
 .btn-success {
@@ -210,8 +361,9 @@ textarea.form-control.address-area {
   color: #fff;
 }
 
-.btn-success:hover {
+.btn-success:hover:not(:disabled) {
   background-color: #218838;
+  transform: translateY(-1px);
 }
 
 .btn-primary {
@@ -219,8 +371,9 @@ textarea.form-control.address-area {
   color: #fff;
 }
 
-.btn-primary:hover {
-  background-color: #2c3c8f;
+.btn-primary:hover:not(:disabled) {
+  background-color: #35449c;
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -228,8 +381,9 @@ textarea.form-control.address-area {
   color: #fff;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   background-color: #546e7a;
+  transform: translateY(-1px);
 }
 
 .btn-warning {
@@ -237,15 +391,46 @@ textarea.form-control.address-area {
   color: #fff;
 }
 
-.btn-warning:hover {
+.btn-warning:hover:not(:disabled) {
   background-color: #e68900;
+  transform: translateY(-1px);
 }
 
-/* === PRINT TOGGLE === */
+/* ================================================================
+   Spinner
+   ================================================================ */
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  flex-shrink: 0;
+}
+
+.spinner--light {
+  border-color: rgba(255, 255, 255, 0.4);
+  border-right-color: transparent;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ================================================================
+   Print toggle
+   ================================================================ */
 .print-toggle .print-view {
   display: none;
 }
 
+/* ================================================================
+   Print styles
+   ================================================================ */
 @media print {
   .no-print {
     display: none !important;
@@ -258,20 +443,60 @@ textarea.form-control.address-area {
   .print-toggle .print-view {
     display: inline !important;
   }
-}
 
-/* Optional: small screens */
-@media (max-width: 720px) {
-  .info-grid {
-    grid-template-columns: 1fr;
-    /* stack on mobile */
+  .container {
+    padding: 0;
+    max-width: 100%;
+    box-shadow: none;
   }
 
-  .right-meta {
-    text-align: left;
+  .description-print {
+    display: inline-block !important;
+  }
+
+  .grand-total-row .grand-total {
+    color: #000 !important;
+  }
+}
+
+/* ================================================================
+   Responsive
+   ================================================================ */
+@media (max-width: 720px) {
+  .container {
+    padding: 20px 12px;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
   }
 
   .right-meta .meta {
     justify-content: flex-start;
+  }
+
+  .right-meta label {
+    text-align: left;
+  }
+
+  .actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .email-input {
+    min-width: 100%;
+  }
+
+  .actions-row .btn {
+    justify-content: center;
+  }
+
+  select.form-control.client-select {
+    min-width: 100%;
+  }
+
+  textarea.form-control.address-area {
+    width: 100%;
   }
 }
