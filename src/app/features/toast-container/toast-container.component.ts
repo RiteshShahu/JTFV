@@ -12,7 +12,7 @@ type ConfirmMsg = {
   resolve: (v: boolean) => void;
 };
 
-@Component({  
+@Component({
   selector: 'app-toast-container',
   template: `
     <div class="toast-wrap">
@@ -22,7 +22,11 @@ type ConfirmMsg = {
       </div>
 
       <!-- confirm toasts -->
-      <div *ngFor="let c of confirms" class="toast toast-confirm" [attr.data-type]="c.type" (keydown.escape)="cancel(c)">
+      <div *ngFor="let c of confirms"
+           class="toast toast-confirm"
+           [attr.data-type]="c.type"
+           tabindex="0"
+           (keydown.escape)="cancel(c)">
         <div class="row">
           <div class="msg">{{ c.message }}</div>
           <div class="actions">
@@ -33,11 +37,10 @@ type ConfirmMsg = {
       </div>
     </div>
   `,
-  
   styles: [`
     .toast-wrap {
       position: fixed;
-      top: 100px;       /* was 70px */
+      top: 100px;
       right: 20px;
       z-index: 99999;
       display: grid;
@@ -67,7 +70,6 @@ type ConfirmMsg = {
     .btn.cancel { background: rgba(0,0,0,.25); color: #fff; }
   `]
 })
-
 export class ToastContainerComponent implements OnInit {
   toasts: ToastMsg[] = [];
   confirms: ConfirmMsg[] = [];

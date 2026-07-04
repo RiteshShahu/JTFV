@@ -47,33 +47,6 @@ export class ReportsComponent implements OnInit {
             }
           }
 
-          this.bills = data.map((bill: any) => {
-            let billItems: any[] = [];
-
-            if (Array.isArray(bill.billItems)) {
-              billItems = bill.billItems;
-            } else {
-              try {
-                const parsed = JSON.parse(bill.billItems);
-                billItems = Array.isArray(parsed) ? parsed : [];
-              } catch {
-                billItems = [];
-              }
-            }
-
-            return {
-              ...bill,
-              billItems,
-
-              // ADD THIS
-              finalAmount: Number(
-                bill.finalAmount ??
-                bill.totalAmount ??
-                0
-              )
-            };
-          });
-
           // Ensure new fields exist with safe defaults
           const isPaid =
             typeof bill.isPaid === 'boolean'
@@ -86,7 +59,20 @@ export class ReportsComponent implements OnInit {
               ? String(bill.billType).toLowerCase()
               : this.deriveBillType({ ...bill, billItems });
 
-          return { ...bill, billItems, billType: derivedBillType, isPaid, paidAt };
+          const finalAmount = Number(
+            bill.finalAmount ??
+            bill.totalAmount ??
+            0
+          );
+
+          return {
+            ...bill,
+            billItems,
+            billType: derivedBillType,
+            isPaid,
+            paidAt,
+            finalAmount
+          };
         });
 
         this.applyFilters();

@@ -1,20 +1,72 @@
-import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ChangeDetectorRef, OnDestroy } from '@angular/core';
 import { ProductService, Name } from 'src/app/core/services/products.service';
 import bwipjs from 'bwip-js';
 import { LabelPrintsService } from 'src/app/core/services/label-prints.service';
 import { Router } from '@angular/router';
 
+// ============= INTERFACES =============
+export interface ProductRow {
+  id: string; // Unique ID for trackBy
+  nameId: number | null;
+  productName: string;
+  mrp: number;
+  category: string;
+  quantity: number;
+  expiryDays: number;
+  expiryDate: string;
+  barcode: string;
+  dbBarcode: string;
+  mrpEdited: boolean;
+  expiryEdited: boolean;
+  units: string;
+}
+
+export interface PrintItem {
+  nameId: number | null;
+  productName: string;
+  units: string;
+  category: string;
+  mrp: number;
+  quantity: number;
+  expiryDays: number;
+  expiryDate: string;
+  barcode: string;
+  dbBarcode?: string;
+}
+
+export interface ToastState {
+  show: boolean;
+  message: string;
+  type: 'success' | 'error' | 'warning';
+}
+
+// ============= CONSTANTS =============
+const VEGETABLE_PREFIX = '953779';
+const FRUIT_PREFIX = '95378';
+const DEFAULT_EXPIRY_DAYS = 1;
+const MIN_MRP = 0;
+const TOAST_DURATION = 3000;
+
+// ============= COMPONENT =============
 @Component({
   selector: 'app-dmart',
   templateUrl: './dmart.component.html',
   styleUrls: ['./dmart.component.css']
 })
-export class DmartComponent implements OnInit {
-  products: any[] = [];
-  printItems: any[] = [];
+export class DmartComponent implements OnInit, OnDestroy {
+  products: ProductRow[] = [];
+  printItems: PrintItem[] = [];
   nameOptions: Name[] = [];
+
   packedOnDate: string = this.getTodayLocalDate();
   currentDate: string = this.getTodayLocalDate();
+
+  isLoading = false;
+  validationErrors: string[] = [];
+  toast: ToastState = { show: false, message: '', type: 'success' };
+
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
+  private printIframe: HTMLIFrameElement | null = null;
   private barcodeCache: Record<string, string> = {};
 
   constructor(
@@ -27,154 +79,279 @@ export class DmartComponent implements OnInit {
   ngOnInit(): void {
     this.addRow();
     this.packedOnDate = this.getTodayLocalDate();
+    this.loadProductNames();
+  }
 
+  ngOnDestroy(): void {
+    this.cleanupPrintIframe();
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+  }
+
+  // ============= PUBLIC GETTERS =============
+
+  get totalPrintItems(): number {
+    return this.getValidProducts().reduce((sum, p) => sum + Number(p.quantity), 0);
+  }
+
+  // ============= INITIALIZATION =============
+
+  private loadProductNames(): void {
     this.productService.getNames().subscribe({
       next: (names) => {
         this.nameOptions = names.sort((a, b) =>
           (`${a.name} ${a.units}`).localeCompare(`${b.name} ${b.units}`)
         );
       },
-      error: (err) => console.error('Failed to load names:', err),
+      error: (err) => {
+        console.error('Failed to load names:', err);
+        this.showToast('Failed to load product list', 'error');
+      },
     });
   }
 
-  goToHistory() {
+  // ============= NAVIGATION =============
+
+  goToHistory(): void {
     this.router.navigate(['/label-history']);
   }
 
-  onMrpKeyDown(event: KeyboardEvent, index: number) {
-    if (event.key === 'Tab' && index === this.products.length - 1) {
-      event.preventDefault();
-      this.addRow();
+  // ============= ROW MANAGEMENT =============
 
-      setTimeout(() => {
-        const selects = document.querySelectorAll(`select[name^='productName']`);
-        const lastSelect = selects[selects.length - 1] as HTMLElement;
-        if (lastSelect) {
-          lastSelect.focus();
-        }
-      });
-    }
-  }
-
-  addRow() {
-    this.products.push({
+  addRow(): void {
+    const newRow: ProductRow = {
+      id: this.generateUniqueId(),
       nameId: null,
       productName: '',
       mrp: 0,
       category: '',
       quantity: 1,
-      expiryDays: 1,
+      expiryDays: DEFAULT_EXPIRY_DAYS,
       expiryDate: this.currentDate,
       barcode: '',
       dbBarcode: '',
       mrpEdited: false,
       expiryEdited: false,
       units: '',
-    });
+    };
+    this.products = [...this.products, newRow];
   }
 
-  onProductIdChange(i: number, nameId: number | null) {
-    const selected = this.nameOptions.find(n => n.id === nameId!);
-    const product = this.products[i];
+  removeRow(index: number): void {
+    this.products = this.products.filter((_, i) => i !== index);
 
-    if (!selected) {
-      product.productName = '';
-      product.category = '';
-      product.units = '';
-      product.dbBarcode = '';
-      product.mrp = 0;
-      product.expiryDays = 1;
-      product.expiryDate = this.getTodayLocalDate();
-      product.barcode = '';
+    if (this.products.length === 0) {
+      this.addRow();
+    }
+
+    this.cdRef.detectChanges();
+  }
+
+  duplicateRow(index: number): void {
+    const source = this.products[index];
+    if (!source.nameId) return;
+
+    const duplicate: ProductRow = {
+      ...source,
+      id: this.generateUniqueId(),
+      quantity: 1, // Reset quantity to 1 for duplicate
+    };
+
+    // Insert after the source row
+    this.products = [
+      ...this.products.slice(0, index + 1),
+      duplicate,
+      ...this.products.slice(index + 1),
+    ];
+
+    this.showToast('Row duplicated', 'success');
+  }
+
+  resetForm(): void {
+    this.packedOnDate = this.getTodayLocalDate();
+    this.products = [];
+    this.validationErrors = [];
+    this.barcodeCache = {};
+    this.addRow();
+    this.cdRef.detectChanges();
+    this.showToast('Form reset', 'success');
+  }
+
+  // ============= PRODUCT SELECTION =============
+
+  onProductIdChange(index: number, nameId: number | null): void {
+    const product = this.products[index];
+
+    if (!nameId) {
+      this.resetProductRow(product);
       return;
     }
 
+    const selected = this.nameOptions.find((n) => n.id === nameId);
+    if (!selected) {
+      this.resetProductRow(product);
+      return;
+    }
+
+    this.populateProductFromSelection(product, selected);
+    this.generateBarcode(product);
+  }
+
+  private resetProductRow(product: ProductRow): void {
+    product.nameId = null;
+    product.productName = '';
+    product.category = '';
+    product.units = '';
+    product.dbBarcode = '';
+    product.mrp = 0;
+    product.expiryDays = DEFAULT_EXPIRY_DAYS;
+    product.expiryDate = this.getTodayLocalDate();
+    product.barcode = '';
+    product.mrpEdited = false;
+    product.expiryEdited = false;
+  }
+
+  private populateProductFromSelection(product: ProductRow, selected: Name): void {
     product.nameId = selected.id;
     product.productName = `${selected.name} ${selected.units}`;
-    product.category = selected.type
-      ? selected.type.charAt(0).toUpperCase() + selected.type.slice(1)
-      : '';
+    product.category = this.formatCategory(selected.type);
     product.units = selected.units;
-    product.dbBarcode = selected.barcode;
-
+    product.dbBarcode = selected.barcode || '';
     product.mrp = selected.mrp ?? 0;
     product.mrpEdited = false;
-
-    product.expiryDays = selected.expiryDays ?? 1;
+    product.expiryDays = selected.expiryDays ?? DEFAULT_EXPIRY_DAYS;
     product.expiryEdited = false;
+    product.expiryDate = this.calculateExpiryDate(this.packedOnDate, product.expiryDays);
+  }
 
-    const packed = new Date(this.packedOnDate);
-    packed.setDate(packed.getDate() + product.expiryDays);
-    product.expiryDate = packed.toISOString().split('T')[0];
+  // ============= MRP & DATE HANDLING =============
+
+  onMrpChange(index: number): void {
+    const product = this.products[index];
+    product.mrpEdited = true;
+
+    // Clamp MRP to valid range
+    if (product.mrp < MIN_MRP) {
+      product.mrp = MIN_MRP;
+    }
 
     this.generateBarcode(product);
   }
 
-  onMrpChange(index: number) {
-    this.products[index].mrpEdited = true;
-    this.generateBarcode(this.products[index]);
+  onMrpKeyDown(event: KeyboardEvent, index: number): void {
+    if (event.key === 'Tab' && !event.shiftKey && index === this.products.length - 1) {
+      event.preventDefault();
+      this.addRow();
+
+      setTimeout(() => {
+        const selects = document.querySelectorAll<HTMLSelectElement>('select[name^="productName"]');
+        const lastSelect = selects[selects.length - 1];
+        lastSelect?.focus();
+      }, 50);
+    }
   }
 
-  onExpiryChange(index: number) {
+  onExpiryChange(index: number): void {
     this.products[index].expiryEdited = true;
     this.updateExpiry(index);
   }
 
-  private getTodayLocalDate(): string {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  updateExpiry(index: number): void {
+    this.products[index].expiryDate = this.calculateExpiryDate(
+      this.packedOnDate,
+      Number(this.products[index].expiryDays)
+    );
   }
 
-  resetForm() {
-    this.packedOnDate = this.getTodayLocalDate();
-    this.products = [];
-    this.barcodeCache = {};
-    this.addRow();
+  onPackedOnChange(): void {
+    this.products = this.products.map((p) => ({
+      ...p,
+      expiryDate: this.calculateExpiryDate(this.packedOnDate, Number(p.expiryDays)),
+    }));
+
+    this.products.forEach((p) => this.generateBarcode(p));
     this.cdRef.detectChanges();
   }
 
-  removeRow(index: number) {
-    this.products.splice(index, 1);
-    if (this.products.length === 0) {
-      this.addRow();
+  // ============= BARCODE GENERATION =============
+
+  generateBarcode(product: ProductRow | PrintItem): void {
+    if (!product.category || product.mrp == null || product.mrp <= 0) {
+      product.barcode = '';
+      return;
     }
-  }
-
-  updateExpiry(index: number) {
-    const today = new Date(this.packedOnDate);
-    const expiry = new Date(today);
-    expiry.setDate(today.getDate() + Number(this.products[index].expiryDays));
-    this.products[index].expiryDate = expiry.toISOString().substring(0, 10);
-  }
-
-  onPackedOnChange() {
-    this.products.forEach((p) => {
-      const packed = new Date(this.packedOnDate);
-      packed.setDate(packed.getDate() + Number(p.expiryDays));
-      p.expiryDate = packed.toISOString().substring(0, 10);
-      this.generateBarcode(p);
-    });
-
-    this.cdRef.detectChanges();
-  }
-
-  generateBarcode(product: any) {
-    if (!product.category || product.mrp == null) return;
 
     const isVegetable = product.category.toLowerCase() === 'vegetable';
-    const prefix = isVegetable ? '953779' : '95378';
+    const prefix = isVegetable ? VEGETABLE_PREFIX : FRUIT_PREFIX;
     const paise = Math.round(product.mrp * 100);
 
     product.barcode = `${prefix}0000${paise}`;
   }
 
-  trackByIndex(index: number): number {
-    return index;
+  // ============= VALIDATION =============
+
+  hasRowErrors(index: number): boolean {
+    const p = this.products[index];
+    if (!p.nameId) return false;
+
+    return !p.productName ||
+      p.mrp <= 0 ||
+      !p.category ||
+      !p.barcode;
   }
+
+  isRowComplete(product: ProductRow): boolean {
+    return !!(
+      product.nameId &&
+      product.productName &&
+      product.mrp > 0 &&
+      product.category &&
+      product.barcode
+    );
+  }
+
+  getValidProducts(): ProductRow[] {
+    return this.products.filter(
+      (p) => p.quantity > 0 && p.productName && p.mrp > 0 && p.barcode
+    );
+  }
+
+  validateBeforePrint(): boolean {
+    this.validationErrors = [];
+
+    if (this.products.length === 0) {
+      this.validationErrors.push('No products added');
+      return false;
+    }
+
+    const validProducts = this.getValidProducts();
+    if (validProducts.length === 0) {
+      this.validationErrors.push('No valid products to print');
+
+      // Add specific errors
+      this.products.forEach((p, i) => {
+        if (p.nameId && !p.productName) {
+          this.validationErrors.push(`Row ${i + 1}: Product name missing`);
+        }
+        if (p.nameId && p.mrp <= 0) {
+          this.validationErrors.push(`Row ${i + 1}: Invalid MRP`);
+        }
+        if (p.nameId && !p.category) {
+          this.validationErrors.push(`Row ${i + 1}: Category not selected`);
+        }
+        if (p.nameId && !p.barcode) {
+          this.validationErrors.push(`Row ${i + 1}: Barcode could not be generated`);
+        }
+      });
+
+      return false;
+    }
+
+    return true;
+  }
+
+  // ============= JOB PAYLOAD =============
 
   private buildJobPayload(): {
     packedOnDate: string;
@@ -191,19 +368,17 @@ export class DmartComponent implements OnInit {
       barcode: string;
     }[];
   } {
-    const items = this.products
-      .filter(p => p.quantity > 0 && p.productName && p.mrp > 0 && p.barcode)
-      .map(p => ({
-        nameId: p.nameId,
-        productName: p.productName,
-        units: p.units,
-        category: p.category,
-        mrp: Number(p.mrp),
-        quantity: Number(p.quantity),
-        expiryDays: Number(p.expiryDays),
-        expiryDate: p.expiryDate,
-        barcode: p.barcode,
-      }));
+    const items = this.getValidProducts().map(p => ({
+      nameId: p.nameId ?? undefined,
+      productName: p.productName,
+      units: p.units,
+      category: p.category,
+      mrp: Number(p.mrp),
+      quantity: Number(p.quantity),
+      expiryDays: Number(p.expiryDays),
+      expiryDate: p.expiryDate,
+      barcode: p.barcode,
+    }));
 
     return {
       packedOnDate: this.packedOnDate,
@@ -211,6 +386,8 @@ export class DmartComponent implements OnInit {
       items,
     };
   }
+
+  // ============= BARCODE IMAGE (DATA URL) =============
 
   private getBarcodeDataUrl(barcode: string): string {
     if (!barcode) return '';
@@ -236,7 +413,15 @@ export class DmartComponent implements OnInit {
     return dataUrl;
   }
 
-  printSelected() {
+  // ============= PRINT OPERATIONS =============
+
+  printSelected(): void {
+    if (!this.validateBeforePrint()) {
+      this.showToast('Please fix the errors before printing', 'error');
+      return;
+    }
+
+    this.isLoading = true;
     this.preparePrintItems();
 
     try {
@@ -250,32 +435,50 @@ export class DmartComponent implements OnInit {
       const electron = (window as any).electron;
 
       if (!electron || typeof electron.printDmart38x25 !== 'function') {
-        alert('Electron print API not available.');
+        this.isLoading = false;
+        this.showToast('Electron print API not available.', 'error');
         return;
       }
 
       electron.printDmart38x25(htmlPayload).then((result: any) => {
+        this.isLoading = false;
+        this.cdRef.detectChanges();
+
         if (!result?.ok) {
-          alert(result?.error || 'Print failed');
+          this.showToast(result?.error || 'Print failed', 'error');
           return;
         }
+
+        this.showToast(`Printed ${this.printItems.length} labels`, 'success');
 
         this.labelPrints.savePrintJob(payload).subscribe({
           next: () => { },
           error: (e) => console.error('Failed to log print job:', e),
         });
+      }).catch((e: any) => {
+        console.error('Failed to print:', e);
+        this.isLoading = false;
+        this.showToast('Print failed', 'error');
+        this.cdRef.detectChanges();
       });
     } catch (e) {
       console.error('Failed to print:', e);
+      this.isLoading = false;
+      this.showToast('Print failed', 'error');
     }
   }
 
-  testPreview() {
+  testPreview(): void {
+    if (!this.validateBeforePrint()) {
+      this.showToast('Please fix the errors before previewing', 'error');
+      return;
+    }
+
     this.preparePrintItems();
 
     const previewWin = window.open('', '_blank');
     if (!previewWin) {
-      alert('Popup blocked. Please allow popups for this site.');
+      this.showToast('Popup blocked. Please allow popups for this site.', 'warning');
       return;
     }
 
@@ -285,17 +488,122 @@ export class DmartComponent implements OnInit {
     previewWin.focus();
   }
 
-  private preparePrintItems() {
-    this.printItems = [];
-    this.products.forEach((p) => {
-      if (p.quantity > 0 && p.productName && p.mrp > 0 && p.barcode) {
-        for (let i = 0; i < p.quantity; i++) {
-          this.printItems.push({ ...p });
-        }
-      }
+  printAllBarcodesTest(): void {
+    if (!this.nameOptions || this.nameOptions.length === 0) {
+      this.showToast('Product list not loaded yet. Please wait.', 'warning');
+      return;
+    }
+
+    this.printItems = this.nameOptions
+      .map((n) => this.createPrintItemFromName(n))
+      .filter((p): p is PrintItem =>
+        p !== null && !!p.productName && p.mrp > 0 && !!p.barcode
+      );
+
+    if (this.printItems.length === 0) {
+      this.showToast('No valid items to print', 'warning');
+      return;
+    }
+
+    this.isLoading = true;
+    this.executeIframePrint(() => {
+      this.isLoading = false;
+      this.cdRef.detectChanges();
     });
+  }
+
+  private executeIframePrint(onComplete: () => void): void {
+    this.cleanupPrintIframe();
+
+    const iframe = document.createElement('iframe');
+    this.printIframe = iframe;
+
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      this.showToast('Failed to create print window', 'error');
+      this.cleanupPrintIframe();
+      onComplete();
+      return;
+    }
+
+    doc.open();
+    doc.write(this.generatePrintHTML());
+    doc.close();
+
+    iframe.onload = () => {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+
+      setTimeout(() => {
+        this.cleanupPrintIframe();
+        onComplete();
+        this.showToast(`Printed ${this.printItems.length} labels`, 'success');
+      }, 1000);
+    };
+  }
+
+  private cleanupPrintIframe(): void {
+    if (this.printIframe && this.printIframe.parentNode) {
+      try {
+        document.body.removeChild(this.printIframe);
+      } catch (e) {
+        // iframe may already be removed
+      }
+    }
+    this.printIframe = null;
+  }
+
+  // ============= PREPARATION =============
+
+  private preparePrintItems(): void {
+    this.printItems = this.getValidProducts().flatMap((p) =>
+      Array.from({ length: Number(p.quantity) }, () => ({
+        nameId: p.nameId,
+        productName: p.productName,
+        units: p.units,
+        category: p.category,
+        mrp: Number(p.mrp),
+        quantity: 1,
+        expiryDays: Number(p.expiryDays),
+        expiryDate: p.expiryDate,
+        barcode: p.barcode,
+        dbBarcode: p.dbBarcode,
+      }))
+    );
     this.cdRef.detectChanges();
   }
+
+  private createPrintItemFromName(n: Name): PrintItem | null {
+    const category = this.formatCategory(n.type);
+    const expiryDays = n.expiryDays ?? DEFAULT_EXPIRY_DAYS;
+    const expiryDate = this.calculateExpiryDate(this.packedOnDate, expiryDays);
+
+    const item: PrintItem = {
+      nameId: n.id,
+      productName: `${n.name} ${n.units}`,
+      units: n.units,
+      category,
+      mrp: Number(n.mrp ?? 0),
+      quantity: 1,
+      expiryDays,
+      expiryDate,
+      dbBarcode: n.barcode || '',
+      barcode: '',
+    };
+
+    this.generateBarcode(item);
+    return item;
+  }
+
+  // ============= HTML GENERATION =============
 
   private generatePrintHTML(): string {
     const head = `
@@ -463,7 +771,7 @@ export class DmartComponent implements OnInit {
   }
 
   private generateDmartBody(): string {
-    const formatDate = (dateStr: string) => {
+    const formatDate = (dateStr: string): string => {
       const d = new Date(dateStr);
       const dd = String(d.getDate()).padStart(2, '0');
       const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -480,7 +788,7 @@ export class DmartComponent implements OnInit {
         <div class="dmart-label">
           <span class="side-brand">Dmart</span>
           <div class="label-header">J T FRUITS &amp; VEG</div>
-          <div class="label-product">${p.productName}</div>
+          <div class="label-product">${this.escapeHtml(p.productName)}</div>
           <img src="${this.getBarcodeDataUrl(p.barcode)}" />
           <div class="barcode-value">${p.barcode}</div>
 
@@ -500,70 +808,61 @@ export class DmartComponent implements OnInit {
       .join('');
   }
 
-  printAllBarcodesTest() {
-    if (!this.nameOptions || this.nameOptions.length === 0) {
-      alert('Names not loaded yet. Please wait a moment.');
-      return;
+  // ============= TRACK BY =============
+
+  trackByProductId(index: number, item: ProductRow): string {
+    return item.id;
+  }
+
+  // ============= UTILITY METHODS =============
+
+  getTodayLocalDate(): string {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private calculateExpiryDate(packedOnDate: string, expiryDays: number): string {
+    const packed = new Date(packedOnDate);
+    packed.setDate(packed.getDate() + expiryDays);
+    return packed.toISOString().split('T')[0];
+  }
+
+  private formatCategory(type: string | null | undefined): string {
+    if (!type) return '';
+    return type.charAt(0).toUpperCase() + type.slice(1);
+  }
+
+  private generateUniqueId(): string {
+    return `row_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  private escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  getTotalMRP(): number {
+    return this.getValidProducts().reduce(
+      (sum, p) => sum + (p.mrp * p.quantity),
+      0
+    );
+  }
+
+  private showToast(message: string, type: ToastState['type']): void {
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
     }
 
-    this.printItems = this.nameOptions
-      .map((n) => {
-        const category = n.type
-          ? n.type.charAt(0).toUpperCase() + n.type.slice(1)
-          : '';
+    this.toast = { show: true, message, type };
+    this.cdRef.detectChanges();
 
-        const expiryDays = n.expiryDays ?? 1;
-
-        const packed = new Date(this.packedOnDate);
-        packed.setDate(packed.getDate() + expiryDays);
-        const expiryDate = packed.toISOString().split('T')[0];
-
-        const item: any = {
-          nameId: n.id,
-          productName: `${n.name} ${n.units}`,
-          units: n.units,
-          category,
-          mrp: Number(n.mrp ?? 0),
-          quantity: 1,
-          expiryDays,
-          expiryDate,
-          dbBarcode: n.barcode || '',
-          barcode: '',
-        };
-
-        this.generateBarcode(item);
-        return item;
-      })
-      .filter(p => p.productName && p.mrp > 0 && p.barcode);
-
-    if (this.printItems.length === 0) {
-      alert('No valid items to print.');
-      return;
-    }
-
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.right = '0';
-    iframe.style.bottom = '0';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    iframe.style.border = '0';
-    document.body.appendChild(iframe);
-
-    const doc = iframe.contentDocument || iframe.contentWindow?.document;
-    if (!doc) return;
-
-    doc.open();
-    doc.write(this.generatePrintHTML());
-    doc.close();
-
-    iframe.onload = () => {
-      iframe.contentWindow?.focus();
-      iframe.contentWindow?.print();
-
-      setTimeout(() => {
-        document.body.removeChild(iframe);
-      }, 1000);
-    };
+    this.toastTimer = setTimeout(() => {
+      this.toast.show = false;
+      this.cdRef.detectChanges();
+    }, TOAST_DURATION);
   }
 }

@@ -149,38 +149,38 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
 
   private static styles(): string {
     return `
-      <style>
-        @page { size: A4; margin: 10mm; }
-        @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
-        body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
-        h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
-        p { margin:5px 0; font-size:13px; color:#546e7a; }
-        .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
-        .tax-parties { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px;
-          padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9;
-          margin-bottom:12px; font-size:11px; }
-        .party-title { text-transform:uppercase; font-weight:700; letter-spacing:.4px; margin-bottom:6px; }
-        .party-name { font-weight:600; margin-bottom:4px; }
-        .party-address { line-height:1.45; }
-        .invoice-details .inv-row { display:flex; justify-content:space-between; margin-bottom:6px; white-space:nowrap; }
-        .invoice-details .value { font-weight:600; }
-        table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
-        th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
-        th { background:#757575 !important; color:#fff !important; font-weight:700; }
-        .total-row { background:#f4f6f8 !important; font-weight:700; }
-        .left { text-align:left; }
-        thead { display: table-header-group; }
-        .no-repeat { page-break-inside: avoid; }
-        .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; }
-        .left-column { display:flex; flex-direction:column; gap:8px; }
-        .box { border:1px solid #bdbdbd; }
-        .box-title { background:#757575 !important; color:#fff !important; font-weight:700; padding:6px 8px; font-size:12px; }
-        .box-body { padding:6px 8px; font-size:12px; }
-        .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
-        .amount-grid .v { text-align:right; }
-        .page { page-break-after: always; }
-        .page:last-child { page-break-after: auto; }
-      </style>`;
+    <style>
+      @page { size: A4; margin: 10mm; }
+      @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
+      body { font-family: 'Poppins','Segoe UI',Tahoma,sans-serif; color:#2c3e50; padding:40px; background:#fff; }
+      h1 { margin:0; font-size:25px; font-weight:bold; color:#333; }
+      p { margin:5px 0; font-size:13px; color:#546e7a; }
+      .invoice-title { text-align:center; font-size:22px; font-weight:bold; margin:12px 0; color:#2c3e50; }
+      .tax-parties { display:grid; grid-template-columns:1fr 1fr 1fr; gap:24px;
+        padding:10px 0 0; border-top:3px solid #c9c9c9; border-bottom:1px solid #c9c9c9;
+        margin-bottom:12px; font-size:11px; }
+      .party-title { text-transform:uppercase; font-weight:700; letter-spacing:.4px; margin-bottom:6px; }
+      .party-name { font-weight:600; margin-bottom:4px; }
+      .party-address { line-height:1.45; }
+      .invoice-details .inv-row { display:flex; justify-content:space-between; margin-bottom:6px; white-space:nowrap; }
+      .invoice-details .value { font-weight:600; }
+      table { width:100%; border-collapse:collapse; font-size:12px; margin:16px 0; background:#fff; }
+      th, td { border:1px solid #bdbdbd; padding:8px 10px; text-align:center; }
+      th { background:#757575 !important; color:#fff !important; font-weight:700; }
+      .total-row { background:#f4f6f8 !important; font-weight:700; }
+      .left { text-align:left; }
+      thead { display: table-header-group; }
+      .no-repeat { page-break-inside: avoid; }
+      .boxes { display:grid; grid-template-columns:2fr 1fr; gap:10px; margin-top:10px; page-break-inside: avoid; break-inside: avoid; }
+      .left-column { display:flex; flex-direction:column; gap:8px; }
+      .box { border:1px solid #bdbdbd; page-break-inside: avoid; break-inside: avoid; }
+      .box-title { background:#757575 !important; color:#fff !important; font-weight:700; padding:6px 8px; font-size:12px; }
+      .box-body { padding:6px 8px; font-size:12px; }
+      .amount-grid { display:grid; grid-template-columns:1fr auto; row-gap:4px; padding:6px 8px; font-size:12px; }
+      .amount-grid .v { text-align:right; }
+      .page { page-break-after: always; }
+      .page:last-child { page-break-after: auto; }
+    </style>`;
   }
 
   /* ---- Instance wrapper for template ---- */
@@ -1141,7 +1141,10 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
     return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
   }
 
-  /* ---- Static HTML builder for Reports → Download PDF ---- */
+  /* ---- Static HTML builder for Reports → Download PDF ----
+     FIXED: body now matches the email/print layout exactly,
+     including the "Terms and conditions" and "Amounts" boxes
+     at the bottom of the bill. ---- */
 
   static buildRelianceHtml(payload: {
     billNumber: string;
@@ -1191,7 +1194,7 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
       (a, it) => a + (Number(it.quantity) || 0),
       0
     );
-    const totalPrice = +items
+    const totalItemPrice = +items
       .reduce((a, it) => a + (it.price || 0), 0)
       .toFixed(2);
     const totalAmount = +(
@@ -1202,8 +1205,14 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
     const rows = items
       .map(
         (it, i) => `
-      <tr><td>${i + 1}</td><td>${it.productName}</td><td>${it.quantity}</td>
-      <td>₹ ${EditRelianceBillsComponent.inr(it.price)}</td><td>₹ ${EditRelianceBillsComponent.inr(it.total)}</td></tr>`
+      <tr>
+        <td>${i + 1}</td>
+        <td>${it.productName || ''}</td>
+        <td>${it.quantity ?? 0}</td>
+        <td>₹ ${EditRelianceBillsComponent.inr(it.price ?? 0)}</td>
+        <td>₹ ${EditRelianceBillsComponent.inr(it.total ?? 0)}</td>
+      </tr>
+    `
       )
       .join('');
 
@@ -1214,39 +1223,70 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
         <p>PAN: AAJFJ0258J | FSS LICENSE ACT 2006 LICENSE NO: 11517011000128</p>
         <p>Email: jkumarshahu5@gmail.com</p>
       </div>
+
       <div class="invoice-title">Tax Invoice</div>
+
       <div class="tax-parties">
-        <div><div class="party-title">Bill To</div>
+        <div class="party">
+          <div class="party-title">Bill To</div>
           <div class="party-name">${payload.clientName || EditRelianceBillsComponent.RELIANCE_CLIENT}</div>
           <div class="party-address">${payload.address || EditRelianceBillsComponent.RELIANCE_ADDR}</div>
         </div>
-        <div><div class="party-title">Ship To</div>
+        <div class="party">
+          <div class="party-title">Ship To</div>
           <div class="party-name">${shipToName}</div>
           <div class="party-address">${shipToAddress}</div>
         </div>
-        <div><div class="party-title">Invoice Details</div>
-          <div>Invoice No.: ${payload.billNumber}</div>
-          <div>Date: ${new Date(payload.billDate).toLocaleDateString('en-GB')}</div>
+        <div class="invoice-details">
+          <div class="party-title">Invoice Details</div>
+          <div class="inv-row"><span>Invoice No.:</span><span class="value">${payload.billNumber}</span></div>
+          <div class="inv-row"><span>Date:</span><span class="value">${new Date(payload.billDate).toLocaleDateString('en-GB')}</span></div>
         </div>
       </div>
+
       <table>
-        <thead><tr><th>#</th><th>Item</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead>
-        <tbody>${rows}
-          <tr class="total-row"><td colspan="2">Total</td><td>${totalQty}</td>
-            <td>₹ ${EditRelianceBillsComponent.inr(totalPrice)}</td><td>₹ ${EditRelianceBillsComponent.inr(totalAmount)}</td></tr>
+        <thead>
+          <tr><th>#</th><th>Item</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+          ${rows}
+          <tr class="total-row no-repeat">
+            <td colspan="2" class="left"><strong>Total</strong></td>
+            <td><strong>${totalQty}</strong></td>
+            <td><strong>₹ ${EditRelianceBillsComponent.inr(totalItemPrice)}</strong></td>
+            <td><strong>₹ ${EditRelianceBillsComponent.inr(totalAmount)}</strong></td>
+          </tr>
         </tbody>
       </table>
+
       <div class="boxes">
-        <div class="box">
-          <div class="box-title">Invoice Amount In Words</div>
-          <div class="box-body">${EditRelianceBillsComponent.amountInWords(totalAmount)}</div>
+        <div class="left-column">
+          <div class="box">
+            <div class="box-title">Invoice Amount In Words</div>
+            <div class="box-body">${EditRelianceBillsComponent.amountInWords(totalAmount)}</div>
+          </div>
+          <div class="box">
+            <div class="box-title">Terms and conditions</div>
+            <div class="box-body">
+              Thank You for your order!<br>
+              This is a computer generated bill. No Signature Required.
+            </div>
+          </div>
         </div>
-      </div>`;
+        <div class="box">
+          <div class="box-title">Amounts</div>
+          <div class="amount-grid">
+            <div>Sub Total</div><div class="v">₹ ${EditRelianceBillsComponent.inr(totalAmount)}</div>
+            <div><strong>Total</strong></div><div class="v"><strong>₹ ${EditRelianceBillsComponent.inr(totalAmount)}</strong></div>
+          </div>
+        </div>
+      </div>
+    `;
 
     const pages = Array.from({ length: copies })
       .map(() => `<div class="page">${body}</div>`)
       .join('');
 
-    return `<!doctype html><html><head><meta charset="utf-8">${EditRelianceBillsComponent.styles()}<title>${payload.billNumber}</title></head><body>${pages}</body></html>`;
+    return `<!doctype html><html><head><meta charset="utf-8">${EditRelianceBillsComponent.styles()}<title>Invoice ${payload.billNumber}</title></head><body>${pages}</body></html>`;
   }
 }
