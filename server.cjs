@@ -1042,6 +1042,10 @@ app.post('/api/send-bill', async (req, res) => {
     cc,
     bcc,
     pdfHtml,
+    billHtmls,
+    billNumbers,
+    billType,
+    body,
     subject = `Invoice - ${bill.billNumber || 'JT'}`,
     filename = `Invoice-${bill.billNumber || 'JT'}.pdf`,
     billNumber,
@@ -1070,9 +1074,6 @@ app.post('/api/send-bill', async (req, res) => {
   if (!validRecipients.length) {
     return res.status(400).json({ message: 'Missing or invalid recipient email(s)' });
   }
-  if (!pdfHtml) {
-    return res.status(400).json({ message: 'Missing pdfHtml' });
-  }
 
   const ccList = normalizeList(cc).filter(isValidEmail);
   const bccList = normalizeList(bcc).filter(isValidEmail);
@@ -1090,49 +1091,169 @@ app.post('/api/send-bill', async (req, res) => {
       });
     }
 
-    browser = await puppeteer.launch({
-      executablePath,
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
+    // =====================================================
+    // MULTI-BILL HANDLING
+    // =====================================================
+    if (billType === 'reliance-multi') {
+      console.log('🔵 Processing multi-bill email (reliance-multi)');
 
-    const page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
-    await page.setContent(pdfHtml, { waitUntil: 'networkidle0' });
+      // Validate multi-bill data
+      if (!Array.isArray(billHtmls) || billHtmls.length === 0) {
+        return res.status(400).json({
+          message: 'Invalid multi-bill email: billHtmls must be a non-empty array'
+        });
+      }
 
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
-    });
+      if (!Array.isArray(billNumbers) || billNumbers.length === 0) {
+        return res.status(400).json({
+          message: 'Invalid multi-bill email: billNumbers must be a non-empty array'
+        });
+      }
 
-    const textSummary =
-      `Dear ${clientName || 'Customer'},
+      if (billHtmls.length !== billNumbers.length) {
+        return res.status(400).json({
+          message: 'Invalid multi-bill email: billHtmls and billNumbers must have same length'
+        });
+      }
+
+      if (!body || typeof body !== 'string' || body.trim() === '') {
+        return res.status(400).json({
+          message: 'Invalid multi-bill email: body text is required'
+        });
+      }
+
+      try {
+        // Step 1: Generate separate PDFs from billHtmls array
+        console.log(`📄 Generating ${billHtmls.length} separate PDFs...`);
+        const attachments = [];
+
+        browser = await puppeteer.launch({
+          executablePath,
+          headless: 'new',
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+
+        for (let i = 0; i < billHtmls.length; i++) {
+          const html = billHtmls[i];
+          const bNum = billNumbers[i];
+
+          console.log(`  ➜ Generating PDF for bill ${bNum}...`);
+
+          const page = await browser.newPage();
+          await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
+          await page.setContent(html, { waitUntil: 'networkidle0' });
+
+          const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+          });
+
+          await page.close();
+
+          attachments.push({
+            filename: `Invoice_${bNum}.pdf`,
+            content: pdfBuffer,
+            contentType: 'application/pdf'
+          });
+
+          console.log(`  ✅ Generated Invoice_${bNum}.pdf`);
+        }
+
+        // Step 2: Send email with all attachments
+        console.log(`📧 Sending multi-bill email to ${validRecipients.join(', ')}`);
+
+        await transporter.sendMail({
+          from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
+          to: validRecipients.join(','),
+          cc: ccList.length ? ccList.join(',') : undefined,
+          bcc: bccList.length ? bccList.join(',') : undefined,
+          subject: subject,
+          text: body, // Use the provided email body (with client names)
+          attachments: attachments,
+        });
+
+        console.log(`✅ Multi-bill email sent successfully with ${attachments.length} PDF(s)`);
+
+        return res.status(200).json({
+          message: `Multi-bill email sent successfully with ${attachments.length} PDF(s)`,
+          billsCount: billHtmls.length,
+          attachmentsCount: attachments.length
+        });
+      } catch (error) {
+        console.error('❌ Multi-bill email processing error:', error);
+        return res.status(500).json({
+          message: 'Failed to process multi-bill email',
+          details: (error && error.message) ? error.message : String(error),
+        });
+      }
+    }
+
+    // =====================================================
+    // SINGLE-BILL HANDLING (Backward compatible)
+    // =====================================================
+    else {
+      console.log('🟢 Processing single-bill email');
+
+      if (!pdfHtml) {
+        return res.status(400).json({ message: 'Missing pdfHtml' });
+      }
+
+      try {
+        browser = await puppeteer.launch({
+          executablePath,
+          headless: 'new',
+          args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        });
+
+        const page = await browser.newPage();
+        await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 2 });
+        await page.setContent(pdfHtml, { waitUntil: 'networkidle0' });
+
+        const pdfBuffer = await page.pdf({
+          format: 'A4',
+          printBackground: true,
+          margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' },
+        });
+
+        // Generate default email body if not provided
+        const textSummary = body ||
+          `Dear ${clientName || 'Customer'},
 
 Please find attached invoice${billNumber ? ` (${billNumber})` : ''}${billDate ? ` dated ${billDate}` : ''}.
 
 ${typeof totalAmount === 'number' ? `Total: ₹${Number(totalAmount).toLocaleString('en-IN')}\n` : ''}` +
-      `${typeof discount === 'number' ? `Margin: ${discount}%\n` : ''}` +
-      `${typeof finalAmount === 'number' ? `Final: ₹${Number(finalAmount).toLocaleString('en-IN')}\n` : ''}
+          `${typeof discount === 'number' ? `Margin: ${discount}%\n` : ''}` +
+          `${typeof finalAmount === 'number' ? `Final: ₹${Number(finalAmount).toLocaleString('en-IN')}\n` : ''}
 
 Regards,
 J.T. Fruits & Vegetables`;
 
-    await transporter.sendMail({
-      from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
-      to: validRecipients.join(','),
-      cc: ccList.length ? ccList.join(',') : undefined,
-      bcc: bccList.length ? bccList.join(',') : undefined,
-      subject,
-      text: textSummary,
-      attachments: [
-        { filename, content: pdfBuffer, contentType: 'application/pdf' }
-      ],
-    });
+        await transporter.sendMail({
+          from: process.env.MAIL_FROM || process.env.SMTP_USER || process.env.MAIL_USER,
+          to: validRecipients.join(','),
+          cc: ccList.length ? ccList.join(',') : undefined,
+          bcc: bccList.length ? bccList.join(',') : undefined,
+          subject: subject,
+          text: textSummary,
+          attachments: [
+            { filename, content: pdfBuffer, contentType: 'application/pdf' }
+          ],
+        });
 
-    return res.status(200).json({ message: 'Email sent successfully with PDF attachment' });
+        console.log('✅ Single-bill email sent successfully');
+
+        return res.status(200).json({ message: 'Email sent successfully with PDF attachment' });
+      } catch (error) {
+        console.error('❌ Single-bill email sending failed:', error);
+        return res.status(500).json({
+          message: 'Failed to send email',
+          details: (error && error.message) ? error.message : String(error),
+        });
+      }
+    }
   } catch (error) {
-    console.error('Email sending failed:', error);
+    console.error('❌ Unexpected error in send-bill endpoint:', error);
     return res.status(500).json({
       message: 'Failed to send email',
       details: (error && error.message) ? error.message : String(error),

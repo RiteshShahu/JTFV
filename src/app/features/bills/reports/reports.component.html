@@ -1,8 +1,24 @@
 <app-navbar></app-navbar>
-
 <div class="centered-layout">
   <div class="report-container">
     <h2>Saved Bills</h2>
+
+    <!-- Selection Bar (appears when bills selected) -->
+    <div *ngIf="selectedBillsForEmail.size > 0" class="selection-bar">
+      <div class="selection-info">
+        <span class="selection-count">{{ selectedBillsForEmail.size }} bill(s) selected</span>
+      </div>
+      <div class="selection-actions">
+        <button type="button" class="btn-send-email" (click)="sendSelectedBillsEmail()" [disabled]="isSendingEmail">
+          <span *ngIf="!isSendingEmail">📧 Send Email</span>
+          <span *ngIf="isSendingEmail">Sending...</span>
+        </button>
+        <button type="button" class="btn-clear-selection" (click)="selectedBillsForEmail.clear()"
+          [disabled]="isSendingEmail">
+          Clear
+        </button>
+      </div>
+    </div>
 
     <div class="search-section">
       <div class="field">
@@ -12,18 +28,11 @@
           <option value="clientName">Name</option>
         </select>
       </div>
-
       <div class="field">
         <label for="searchText" class="field-label">Search</label>
-        <input
-          id="searchText"
-          type="text"
-          (input)="onSearch()"
-          [(ngModel)]="searchText"
-          placeholder="Enter search text"
-        />
+        <input id="searchText" type="text" (input)="onSearch()" [(ngModel)]="searchText"
+          placeholder="Enter search text" />
       </div>
-
       <!-- Paid filter -->
       <div class="field">
         <label for="paidFilter" class="field-label">Paid</label>
@@ -33,7 +42,6 @@
           <option value="unpaid">Unpaid</option>
         </select>
       </div>
-
       <div class="actions">
         <button class="button" (click)="applyFilters()">Search</button>
       </div>
@@ -42,6 +50,13 @@
     <table class="report-table" *ngIf="filteredBills.length">
       <thead>
         <tr>
+          <!-- Email selection checkbox column -->
+          <th class="col-checkbox">
+            <input type="checkbox" class="select-all-checkbox"
+              [checked]="selectedBillsForEmail.size === filteredBills.length && filteredBills.length > 0"
+              (change)="onSelectAllChange($event)" [disabled]="isSendingEmail"
+              title="Select all Reliance bills for email" aria-label="Select all bills" />
+          </th>
           <th>Bill No</th>
           <th>Client</th>
           <th>Date</th>
@@ -53,9 +68,17 @@
           <th>Delete</th>
         </tr>
       </thead>
-
       <tbody>
-        <tr *ngFor="let bill of filteredBills" [class.paid]="bill.isPaid">
+        <tr *ngFor="let bill of filteredBills" [class.paid]="bill.isPaid"
+          [class.selected-for-email]="selectedBillsForEmail.has(bill.billNumber)">
+          <!-- Email selection checkbox (only for Reliance bills) -->
+          <td class="col-checkbox">
+            <input *ngIf="isRelianceBill(bill)" type="checkbox" class="bill-checkbox"
+              [checked]="selectedBillsForEmail.has(bill.billNumber)" (change)="toggleBillForEmail(bill.billNumber)"
+              [disabled]="isSendingEmail" title="Select for email"
+              [attr.aria-label]="'Select bill ' + bill.billNumber" />
+          </td>
+
           <td>{{ bill.billNumber }}</td>
           <td>{{ bill.clientName }}</td>
           <td>{{ bill.billDate }}</td>
@@ -64,14 +87,9 @@
 
           <!-- Status badge is now the toggle -->
           <td>
-            <button
-              type="button"
-              class="status-btn"
-              [attr.data-kind]="bill.isPaid ? 'paid' : 'unpaid'"
-              [disabled]="isToggling.has(bill.billNumber)"
-              (click)="togglePaid(bill)"
-              [attr.aria-pressed]="bill.isPaid"
-            >
+            <button type="button" class="status-btn" [attr.data-kind]="bill.isPaid ? 'paid' : 'unpaid'"
+              [disabled]="isToggling.has(bill.billNumber) || isSendingEmail" (click)="togglePaid(bill)"
+              [attr.aria-pressed]="bill.isPaid">
               <ng-container *ngIf="bill.isPaid; else unpaidLbl">
                 ✓ Paid <span *ngIf="bill.paidAt">({{ bill.paidAt | date:'dd-MMM-yy' }})</span>
               </ng-container>
@@ -80,23 +98,26 @@
           </td>
 
           <td>
-            <button  type="button" class="btn-download" (click)="downloadPdf(bill)" [disabled]="downloading.has(bill.billNumber)" >
+            <button type="button" class="btn-download" (click)="downloadPdf(bill)"
+              [disabled]="downloading.has(bill.billNumber) || isSendingEmail">
               {{ downloading.has(bill.billNumber) ? 'Preparing…' : 'Download' }}
             </button>
           </td>
 
           <td>
-            <button type="button" class="btn-edit" (click)="goToEdit(bill)">Edit</button>
+            <button type="button" class="btn-edit" (click)="goToEdit(bill)" [disabled]="isSendingEmail">Edit</button>
           </td>
+
           <td>
-            <button class="btn-delete" (click)="deleteBill(bill.billNumber)">Delete</button>
+            <button class="btn-delete" (click)="deleteBill(bill.billNumber)" [disabled]="isSendingEmail">
+              Delete
+            </button>
           </td>
         </tr>
       </tbody>
     </table>
 
-    <p *ngIf="!filteredBills.length">No bills found.</p>
-
+    <p *ngIf="!filteredBills.length" class="no-bills-message">No bills found.</p>
     <div id="print-section" style="display:none"></div>
   </div>
 </div>
