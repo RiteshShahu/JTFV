@@ -13,26 +13,19 @@
       </select>
     </div>
 
-    <!-- Date Range Filters -->
     <div class="form-group">
       <label for="fromDate">From</label>
-      <input id="fromDate" type="date" [(ngModel)]="dateFrom" (change)="onDateChange()" />
+      <input id="fromDate" type="date" [(ngModel)]="dateFrom" [max]="dateTo" (change)="onDateChange()" />
     </div>
 
     <div class="form-group">
       <label for="toDate">To</label>
-      <input id="toDate" type="date" [(ngModel)]="dateTo" (change)="onDateChange()" />
+      <input id="toDate" type="date" [(ngModel)]="dateTo" [min]="dateFrom" (change)="onDateChange()" />
     </div>
 
-    <!-- Product filter (from DB) -->
     <div class="form-group">
       <label for="prodSelect">Product (from DB)</label>
-      <!-- Use [(ngModel)] + [ngValue] so we get number|null directly and avoid $event.target -->
-      <select
-        id="prodSelect"
-        [(ngModel)]="selectedNameId"
-        (ngModelChange)="onSelectNameId($event)"
-      >
+      <select id="prodSelect" [(ngModel)]="selectedNameId" (ngModelChange)="onSelectNameId($event)">
         <option [ngValue]="null">-- Select Product --</option>
         <option *ngFor="let p of (products$ | async)" [ngValue]="p.id">
           {{ p.name }} <ng-container *ngIf="p.units">({{ p.units }})</ng-container>
@@ -50,112 +43,153 @@
     </div>
 
     <div class="button-group">
-      <button class="button" (click)="reloadSummary()">Refresh</button>
+      <button class="button" (click)="reloadSummary()" [disabled]="loading">
+        {{ loading ? 'Loading…' : 'Refresh' }}
+      </button>
       <button class="button" routerLink="/barcode">Back To Barcode</button>
     </div>
   </div>
 
-  <!-- Totals chip/card for selected product & date window -->
+  <!-- Totals chip/card -->
   <div class="product-totals" *ngIf="productTotals$ | async as t">
     <div class="totals-card">
       <div class="totals-title">
         Product totals for
-        <b *ngIf="selectedProductLabel; else noProdSelected">
-          {{ selectedProductLabel }}
-        </b>
+        <b *ngIf="selectedProductLabel; else noProdSelected">{{ selectedProductLabel }}</b>
         <ng-template #noProdSelected><b>—</b></ng-template>
         from <b>{{ formatDDMMYYYY(dateFrom || '') }}</b> to <b>{{ formatDDMMYYYY(dateTo || '') }}</b>
         <span class="badge">{{ field === 'packedOnDate' ? 'Packed On' : 'Printed On' }}</span>
+        <span class="badge" *ngIf="styleFilter">{{ styleFilter === 'reliance' ? 'Reliance' : 'D-Mart' }}</span>
       </div>
 
-      <div class="totals-values" *ngIf="t; else noTotalsYet">
+      <div class="totals-values">
         <span><strong>{{ t.totalLabels }}</strong> labels</span>
         <span>•</span>
         <span>MRP: <strong>₹{{ t.totalMrp | number:'1.2-2' }}</strong></span>
         <span>•</span>
         <span>Final (15%): <strong>₹{{ t.finalAmount | number:'1.2-2' }}</strong></span>
       </div>
-
-      <ng-template #noTotalsYet>
-        <div class="totals-values">—</div>
-      </ng-template>
     </div>
   </div>
 
   <div *ngIf="loading" class="product-count">Loading…</div>
-
-  <!-- ✅ Define empty state OUTSIDE the *ngIf that references it -->
-  <ng-template #emptyState>
-    <div class="product-count">No print jobs found.</div>
-  </ng-template>
+  <div *ngIf="!loading && loadError" class="product-count">{{ loadError }}</div>
+  <div *ngIf="!loading && !loadError && summaries.length === 0" class="product-count">
+    No print jobs found between {{ formatDDMMYYYY(dateFrom || '') }} and {{ formatDDMMYYYY(dateTo || '') }}.
+  </div>
 
   <!-- Dates table (summary) -->
-  <ng-container *ngIf="!loading">
-    <ng-container *ngIf="(summaries$ | async) as summaries; else emptyState">
-      <div *ngIf="summaries.length" class="excel-table-container">
-        <table class="excel-table">
-          <thead>
-            <tr>
-              <th style="width:160px;">Date</th>
-              <th style="width:120px;"># Jobs</th>
-              <th style="width:140px;">Total Labels</th>
-              <th style="width:160px;">Total MRP</th>
-              <th style="width:180px;">Final Amount (15% Margin)</th>
-              <th></th>
-            </tr>
-          </thead>
+  <div *ngIf="!loading && summaries.length" class="excel-table-container">
+    <table class="excel-table">
+      <thead>
+        <tr>
+          <th style="width:160px;">Date</th>
+          <th style="width:120px;"># Jobs</th>
+          <th style="width:140px;">Total Labels</th>
+          <th style="width:160px;">Total MRP</th>
+          <th style="width:180px;">Final Amount (15% Margin)</th>
+          <th></th>
+        </tr>
+      </thead>
 
-          <tbody>
-            <ng-container *ngFor="let g of summaries; trackBy: trackByDate">
-              <!-- Day row -->
-              <tr [attr.id]="'day-' + g.date">
-                <td><b>{{ formatDDMMYYYY(g.date) }}</b></td>
-                <td>{{ g.jobCount }}</td>
-                <td>{{ g.totalLabels }}</td>
-                <td>₹{{ (g.totalMrp || 0) | number:'1.2-2' }}</td>
-                <td>₹{{ (g.finalAmount || 0) | number:'1.2-2' }}</td>
-                <td>
-                  <button class="action-button edit" (click)="toggleDay(g.date)">
-                    {{ expandedDate === g.date ? 'Hide Jobs' : 'View Jobs' }}
-                  </button>
-                </td>
-              </tr>
+      <tbody>
+        <ng-container *ngFor="let g of summaries; trackBy: trackByDate">
+          <tr [attr.id]="'day-' + g.date">
+            <td><b>{{ formatDDMMYYYY(g.date) }}</b></td>
+            <td>{{ g.jobCount }}</td>
+            <td>{{ g.totalLabels }}</td>
+            <td>₹{{ (g.totalMrp || 0) | number:'1.2-2' }}</td>
+            <td>₹{{ (g.finalAmount || 0) | number:'1.2-2' }}</td>
+            <td>
+              <button class="action-button edit" (click)="toggleDay(g.date)">
+                {{ expandedDate === g.date ? 'Hide Jobs' : 'View Jobs' }}
+              </button>
+            </td>
+          </tr>
 
-              <!-- Jobs for that day -->
-              <tr *ngIf="expandedDate === g.date">
-                <td [attr.colspan]="5" class="inline-items-cell">
-                  <div class="excel-table-container inline-items-card">
-                    <h3>{{ formatDDMMYYYY(g.date) }} — Jobs</h3>
+          <!-- Jobs for that day -->
+          <tr *ngIf="expandedDate === g.date">
+            <td [attr.colspan]="6" class="inline-items-cell">
+              <div class="excel-table-container inline-items-card">
+                <h3>{{ formatDDMMYYYY(g.date) }} — Jobs</h3>
 
-                    <ng-container *ngIf="(jobsForDay$ | async) as jobs; else jobsLoading">
-                      <table class="excel-table jobs" *ngIf="jobs?.length; else noJobs">
+                <div *ngIf="jobsError" class="product-count">{{ jobsError }}</div>
+
+                <ng-container *ngIf="!jobsError">
+                  <div *ngIf="jobsLoading" class="product-count">Loading jobs…</div>
+
+                  <ng-container *ngIf="!jobsLoading">
+                    <div *ngIf="rawJobsForDay.length; else noJobs">
+
+                      <!-- Job list toolbar: search + live totals -->
+                      <div class="job-toolbar">
+                        <input type="text" class="job-search-input" placeholder="Search job id, style, or date…"
+                          [(ngModel)]="jobSearch" />
+                        <button type="button" class="job-clear-btn" *ngIf="jobSearch"
+                          (click)="clearJobSearch()">Clear</button>
+
+                        <div class="job-toolbar-totals">
+                          <span><strong>{{ jobsViewTotals.count }}</strong> job{{ jobsViewTotals.count === 1 ? '' : 's'
+                            }}</span>
+                          <span>•</span>
+                          <span><strong>{{ jobsViewTotals.totalLabels }}</strong> labels</span>
+                          <span>•</span>
+                          <span>MRP: <strong>₹{{ jobsViewTotals.totalMrp | number:'1.2-2' }}</strong></span>
+                          <span>•</span>
+                          <span>Final: <strong>₹{{ jobsViewTotals.finalAmount | number:'1.2-2' }}</strong></span>
+                        </div>
+                      </div>
+
+                      <table class="excel-table jobs" *ngIf="jobsForDayView.length; else noJobsMatch">
                         <thead>
                           <tr>
-                            <th>Job</th>
-                            <th>Printed At</th>
-                            <th>Packed On</th>
-                            <th>Style</th>
-                            <th>Total Labels</th>
-                            <th>Total MRP</th>
-                            <th>Final (15% Margin)</th>
+                            <th class="sortable" (click)="setJobSort('id')">
+                              Job <span class="sort-arrow" *ngIf="jobSortField === 'id'">{{ jobSortDir === 'asc' ? '▲' :
+                                '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('createdAt')">
+                              Printed At <span class="sort-arrow" *ngIf="jobSortField === 'createdAt'">{{ jobSortDir ===
+                                'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('packedOnDate')">
+                              Packed On <span class="sort-arrow" *ngIf="jobSortField === 'packedOnDate'">{{ jobSortDir
+                                === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('printStyle')">
+                              Style <span class="sort-arrow" *ngIf="jobSortField === 'printStyle'">{{ jobSortDir ===
+                                'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('totalLabels')">
+                              Total Labels <span class="sort-arrow" *ngIf="jobSortField === 'totalLabels'">{{ jobSortDir
+                                === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('totalMrp')">
+                              Total MRP <span class="sort-arrow" *ngIf="jobSortField === 'totalMrp'">{{ jobSortDir ===
+                                'asc' ? '▲' : '▼' }}</span>
+                            </th>
+                            <th class="sortable" (click)="setJobSort('finalAmount')">
+                              Final (15% Margin) <span class="sort-arrow" *ngIf="jobSortField === 'finalAmount'">{{
+                                jobSortDir === 'asc' ? '▲' : '▼' }}</span>
+                            </th>
                             <th>Items</th>
                           </tr>
                         </thead>
                         <tbody>
-                          <ng-container *ngFor="let j of jobs; trackBy: trackByJob">
-                            <tr [attr.id]="'job-' + j.id">
+                          <ng-container *ngFor="let j of jobsForDayView; trackBy: trackByJob">
+                            <tr [attr.id]="'job-' + j.id" (click)="toggleItems(j)" class="clickable-row">
                               <td>{{ j.id }}</td>
                               <td>{{ formatDateTime(j.createdAt) }}</td>
                               <td>
-                                {{ j.packedOnDate }}
-                                <span *ngIf="toYMDinIST(j.createdAt) !== j.packedOnDate" class="badge-warn">≠ Printed</span>
+                                {{ formatDDMMYYYY(j.packedOnDate) }}
+                                <span *ngIf="toYMDinIST(j.createdAt) !== j.packedOnDate" class="badge-warn">≠
+                                  Printed</span>
                               </td>
                               <td>{{ j.printStyle }}</td>
                               <td>{{ j.totalLabels }}</td>
                               <td>₹{{ (j.totalMrp || 0) | number:'1.2-2' }}</td>
                               <td>₹{{ (j.finalAmount || 0) | number:'1.2-2' }}</td>
                               <td>
-                                <button class="action-button edit" (click)="toggleItems(j)">
+                                <button class="action-button edit" (click)="toggleItems(j); $event.stopPropagation()">
                                   {{ expandedJobId === j.id ? 'Hide Items' : 'View Items' }}
                                 </button>
                               </td>
@@ -167,49 +201,54 @@
                                 <div class="excel-table-container inline-items-card">
                                   <h3>Job - {{ j.id }} | Items</h3>
 
-                                  <ng-container *ngIf="(itemsForJob$ | async) as items; else itemsLoading">
-                                    <table class="excel-table items" *ngIf="items?.length; else noItems">
-                                      <thead>
-                                        <tr>
-                                          <th>#</th>
-                                          <th>Product</th>
-                                          <th>Category</th>
-                                          <th>MRP</th>
-                                          <th>Qty</th>
-                                          <th>Total Amount</th>
-                                          <th *ngIf="isReliance(j)">Final Amount (15% Margin)</th>
-                                          <th>Barcode</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        <tr *ngFor="let r of items; let i = index; trackBy: trackByItem">
-                                          <td>{{ i + 1 }}</td>
-                                          <td>{{ r.productName }}</td>
-                                          <td>{{ r.category }}</td>
-                                          <td>₹{{ r.mrp }}</td>
-                                          <td>{{ r.quantity }}</td>
-                                          <td>₹{{ rowTotal(r) | number:'1.2-2' }}</td>
-                                          <td *ngIf="isReliance(j)">₹{{ rowFinalWithMargin(r) | number:'1.2-2' }}</td>
-                                          <td>{{ r.barcode }}</td>
-                                        </tr>
-                                      </tbody>
-                                      <tfoot>
-                                        <tr>
-                                          <td colspan="5" style="text-align:right; font-weight:600;">Grand Total:</td>
-                                          <td>₹{{ grandTotal(items) | number:'1.2-2' }}</td>
-                                          <td *ngIf="isReliance(j)">₹{{ grandFinalWithMargin(items) | number:'1.2-2' }}</td>
-                                          <td></td>
-                                        </tr>
-                                      </tfoot>
-                                    </table>
-                                  </ng-container>
+                                  <div *ngIf="itemsError" class="product-count">{{ itemsError }}</div>
 
-                                  <ng-template #itemsLoading>
-                                    <div class="product-count">Loading items…</div>
-                                  </ng-template>
-                                  <ng-template #noItems>
-                                    <div class="product-count">No items.</div>
-                                  </ng-template>
+                                  <ng-container *ngIf="!itemsError">
+                                    <ng-container *ngIf="(itemsForJob$ | async) as items; else itemsLoading">
+                                      <table class="excel-table items" *ngIf="items?.length; else noItems">
+                                        <thead>
+                                          <tr>
+                                            <th>#</th>
+                                            <th>Product</th>
+                                            <th>Category</th>
+                                            <th>MRP</th>
+                                            <th>Qty</th>
+                                            <th>Total Amount</th>
+                                            <th *ngIf="isReliance(j)">Final Amount (15% Margin)</th>
+                                            <th>Barcode</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          <tr *ngFor="let r of items; let i = index; trackBy: trackByItem">
+                                            <td>{{ i + 1 }}</td>
+                                            <td>{{ r.productName }}</td>
+                                            <td>{{ r.category }}</td>
+                                            <td>₹{{ (r.mrp || 0) | number:'1.2-2' }}</td>
+                                            <td>{{ r.quantity }}</td>
+                                            <td>₹{{ rowTotal(r) | number:'1.2-2' }}</td>
+                                            <td *ngIf="isReliance(j)">₹{{ rowFinalWithMargin(r) | number:'1.2-2' }}</td>
+                                            <td>{{ r.barcode }}</td>
+                                          </tr>
+                                        </tbody>
+                                        <tfoot>
+                                          <tr>
+                                            <td colspan="5" style="text-align:right; font-weight:600;">Grand Total:</td>
+                                            <td>₹{{ grandTotal(items) | number:'1.2-2' }}</td>
+                                            <td *ngIf="isReliance(j)">₹{{ grandFinalWithMargin(items) | number:'1.2-2'
+                                              }}</td>
+                                            <td></td>
+                                          </tr>
+                                        </tfoot>
+                                      </table>
+                                    </ng-container>
+
+                                    <ng-template #itemsLoading>
+                                      <div class="product-count">Loading items…</div>
+                                    </ng-template>
+                                    <ng-template #noItems>
+                                      <div class="product-count">No items.</div>
+                                    </ng-template>
+                                  </ng-container>
                                 </div>
                               </td>
                             </tr>
@@ -217,21 +256,21 @@
                         </tbody>
                       </table>
 
-                      <ng-template #noJobs>
-                        <div class="product-count">No jobs on this day.</div>
+                      <ng-template #noJobsMatch>
+                        <div class="product-count">No jobs match "{{ jobSearch }}".</div>
                       </ng-template>
-                    </ng-container>
+                    </div>
 
-                    <ng-template #jobsLoading>
-                      <div class="product-count">Loading jobs…</div>
+                    <ng-template #noJobs>
+                      <div class="product-count">No jobs on this day.</div>
                     </ng-template>
-                  </div>
-                </td>
-              </tr>
-            </ng-container>
-          </tbody>
-        </table>
-      </div>
-    </ng-container>
-  </ng-container>
+                  </ng-container>
+                </ng-container>
+              </div>
+            </td>
+          </tr>
+        </ng-container>
+      </tbody>
+    </table>
+  </div>
 </div>

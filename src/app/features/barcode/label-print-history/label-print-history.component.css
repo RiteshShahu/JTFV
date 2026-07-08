@@ -220,3 +220,77 @@ button.button:hover {
   border-radius: 4px;
   margin-left: 4px;
 }
+
+/* ===== Jobs list toolbar (search + live totals) — additive only ===== */
+.job-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.job-search-input {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #ccd6dd;
+  border-radius: 6px;
+  background-color: #f7f9fc;
+  min-width: 220px;
+  transition: border-color 0.3s ease, background-color 0.3s ease;
+}
+
+.job-search-input:focus {
+  outline: none;
+  border-color: #3f51b5;
+  background-color: #fff;
+}
+
+.job-clear-btn {
+  background-color: #eceff1;
+  color: #37474f;
+  border: 1px solid #ccd6dd;
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.job-clear-btn:hover {
+  background-color: #dfe4e8;
+}
+
+.job-toolbar-totals {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  color: #34495e;
+  font-size: 13.5px;
+  margin-left: auto;
+}
+
+.job-toolbar-totals strong { font-weight: 700; }
+
+/* Sortable column headers */
+.excel-table.jobs th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.excel-table.jobs th.sortable:hover {
+  background-color: #ccd6dd;
+}
+
+.sort-arrow {
+  font-size: 11px;
+  margin-left: 4px;
+  color: #3f51b5;
+}
+
+/* Whole row clickable to expand items */
+.excel-table.jobs tbody tr.clickable-row {
+  cursor: pointer;
+}
