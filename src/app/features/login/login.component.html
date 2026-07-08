@@ -1,6 +1,15 @@
 <div class="login-wrapper">
   <div class="login-container">
-    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()">
+
+    <!-- Shown briefly while checking for an existing saved session -->
+    <mat-card class="login-card" *ngIf="isCheckingSession">
+      <mat-card-content class="login-card__checking">
+        <mat-spinner diameter="32"></mat-spinner>
+        <p>Checking saved session…</p>
+      </mat-card-content>
+    </mat-card>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" *ngIf="!isCheckingSession">
       <mat-card class="login-card">
         <mat-card-header class="login-card__header">
           <div class="login-card__logo-wrapper">
@@ -9,9 +18,14 @@
         </mat-card-header>
 
         <mat-card-content class="login-card__content">
+          <div class="login-card__error" *ngIf="errorMessage">
+            {{ errorMessage }}
+          </div>
+
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Email Address</mat-label>
-            <input matInput type="email" placeholder="Enter your email" formControlName="email" class="login-input" required/>
+            <input matInput type="email" placeholder="Enter your email" formControlName="email" class="login-input"
+              autocomplete="email" required />
             <mat-error *ngIf="loginForm.get('email')?.hasError('required')">
               Email is required
             </mat-error>
@@ -22,7 +36,12 @@
 
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Password</mat-label>
-            <input matInput type="password" placeholder="Enter your password" formControlName="password" class="login-input" required/>
+            <input matInput [type]="showPassword ? 'text' : 'password'" placeholder="Enter your password"
+              formControlName="password" class="login-input" autocomplete="current-password" required />
+            <button mat-icon-button matSuffix type="button" tabindex="-1" (click)="togglePasswordVisibility()"
+              [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'">
+              <mat-icon>{{ showPassword ? 'visibility_off' : 'visibility' }}</mat-icon>
+            </button>
             <mat-error *ngIf="loginForm.get('password')?.hasError('required')">
               Password is required
             </mat-error>
@@ -30,17 +49,21 @@
               Minimum 6 characters required
             </mat-error>
           </mat-form-field>
+
+          <p class="login-card__hint">
+            You'll stay signed in on this device until you log out.
+          </p>
         </mat-card-content>
 
         <mat-card-actions class="login-card__actions">
-          <button mat-raised-button color="primary" type="submit" [disabled]="!loginForm.valid">
-            Sign In
+          <button mat-raised-button color="primary" type="submit" [disabled]="!loginForm.valid || isSubmitting">
+            <mat-spinner *ngIf="isSubmitting" diameter="20" class="login-card__spinner"></mat-spinner>
+            <span *ngIf="!isSubmitting">Sign In</span>
+            <span *ngIf="isSubmitting">Signing In…</span>
           </button>
-          <!-- <button mat-raised-button color="primary" routerLink="/register">
-            Create Account
-          </button> -->
         </mat-card-actions>
       </mat-card>
     </form>
+
   </div>
 </div>

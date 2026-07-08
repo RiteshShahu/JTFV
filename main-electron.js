@@ -142,6 +142,55 @@ ipcMain.handle('ui:refocus-hard', () => {
 });
 
 /* ======================
+   AUTH TOKEN STORAGE (for "stay logged in" — no password ever stored)
+   ====================== */
+
+const AUTH_TOKEN_FILE = path.join(app.getPath('userData'), 'session.json');
+
+ipcMain.handle('auth:save-token', async (_event, token) => {
+  log('IPC auth:save-token called');
+  try {
+    if (!token || typeof token !== 'string') {
+      return { ok: false, error: 'Invalid token' };
+    }
+    fs.writeFileSync(AUTH_TOKEN_FILE, JSON.stringify({ token }), 'utf-8');
+    log('Auth token saved to session.json');
+    return { ok: true };
+  } catch (err) {
+    log(`auth:save-token error: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+ipcMain.handle('auth:get-token', async () => {
+  try {
+    if (!fs.existsSync(AUTH_TOKEN_FILE)) {
+      return { ok: true, token: null };
+    }
+    const raw = fs.readFileSync(AUTH_TOKEN_FILE, 'utf-8');
+    const data = JSON.parse(raw || '{}');
+    return { ok: true, token: data.token || null };
+  } catch (err) {
+    log(`auth:get-token error: ${err?.message || err}`);
+    return { ok: true, token: null };
+  }
+});
+
+ipcMain.handle('auth:clear-token', async () => {
+  log('IPC auth:clear-token called');
+  try {
+    if (fs.existsSync(AUTH_TOKEN_FILE)) {
+      fs.unlinkSync(AUTH_TOKEN_FILE);
+      log('Auth token file removed');
+    }
+    return { ok: true };
+  } catch (err) {
+    log(`auth:clear-token error: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+/* ======================
    PRINT HELPERS (PDF → SPOOL)
    ====================== */
 

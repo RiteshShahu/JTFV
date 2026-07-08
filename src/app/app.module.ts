@@ -13,8 +13,9 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
-
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { LoginComponent } from './features/login/login.component';
 import { DashboardComponent } from './features/dashboard/dashboard.component';
 import { AddMerchantComponent } from './features/dashboard/add-merchant/add-merchant.component';
@@ -43,6 +44,8 @@ import { DmartComponent } from './features/barcode/dmart/dmart.component';
     BrowserAnimationsModule,
     CommonModule,
     FormsModule,
+    MatCheckboxModule,
+    MatProgressSpinnerModule,
     ReactiveFormsModule,
     HttpClientModule,
     MatToolbarModule,

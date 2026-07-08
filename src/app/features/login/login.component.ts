@@ -1,7 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
+
+const API_BASE = (window as any).__APP_API__ || 'http://localhost:3001';
 
 @Component({
   selector: 'app-login',
@@ -12,6 +14,11 @@ export class LoginComponent implements OnInit {
   loginForm: FormGroup;
   logoUrl: string = '';
 
+  isSubmitting = false;
+  isCheckingSession = true; // true while we check for an existing token
+  errorMessage: string | null = null;
+  showPassword = false;
+
   constructor(
     private formBuilder: FormBuilder,
     private http: HttpClient,
@@ -19,38 +26,91 @@ export class LoginComponent implements OnInit {
   ) {
     this.loginForm = this.formBuilder.group({
       email: ['', [Validators.required, Validators.email]],
-      password: ['', [Validators.required, Validators.minLength(6)]]
+      password: ['', [Validators.required, Validators.minLength(6)]],
     });
   }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     this.logoUrl = 'assets/logo.jpg';
 
-    const savedEmail = localStorage.getItem('savedEmail');
-    const savedPassword = localStorage.getItem('savedPassword');
+    // 🧹 One-time cleanup: remove anything a previous version stored
+    localStorage.removeItem('savedPassword');
+    localStorage.removeItem('savedEmail');
 
-    if (savedEmail) {
-      this.loginForm.controls['email'].setValue(savedEmail);
+    await this.tryAutoLogin();
+  }
+
+  private async tryAutoLogin(): Promise<void> {
+    const electron = (window as any).electron;
+    if (!electron?.auth?.getToken) {
+      this.isCheckingSession = false;
+      return;
     }
 
-    if (savedPassword) {
-      this.loginForm.controls['password'].setValue(savedPassword);
+    try {
+      const result = await electron.auth.getToken();
+      const token = result?.token;
+      if (!token) {
+        this.isCheckingSession = false;
+        return;
+      }
+
+      this.http.post<{ valid: boolean; email?: string }>(
+        `${API_BASE}/api/session/validate`, { token }
+      ).subscribe({
+        next: (res) => {
+          if (res.valid) {
+            this.router.navigate(['/dashboard']);
+          } else {
+            electron.auth.clearToken();
+            this.isCheckingSession = false;
+          }
+        },
+        error: () => {
+          // Server unreachable or token rejected — fall back to manual login
+          this.isCheckingSession = false;
+        },
+      });
+    } catch {
+      this.isCheckingSession = false;
     }
   }
 
-  onSubmit(): void {
-    if (this.loginForm.valid) {
-      this.http.post('http://localhost:3001/api/login', this.loginForm.value).subscribe({
-        next: () => {
-          // ✅ Store credentials in localStorage
-          localStorage.setItem('savedEmail', this.loginForm.value.email);
-          localStorage.setItem('savedPassword', this.loginForm.value.password);
+  togglePasswordVisibility(): void {
+    this.showPassword = !this.showPassword;
+  }
 
-          this.router.navigate(['/dashboard']);
-        },
-        error: () => alert('Invalid email or password. Please try again.')
-      });
+  onSubmit(): void {
+    if (this.loginForm.invalid || this.isSubmitting) {
+      this.loginForm.markAllAsTouched();
+      return;
     }
+
+    this.errorMessage = null;
+    this.isSubmitting = true;
+
+    const { email, password } = this.loginForm.value;
+
+    this.http.post<{ message: string; token: string }>(
+      `${API_BASE}/api/login`, { email, password }
+    ).subscribe({
+      next: async (res) => {
+        const electron = (window as any).electron;
+        if (electron?.auth?.saveToken && res.token) {
+          await electron.auth.saveToken(res.token);
+        }
+        this.isSubmitting = false;
+        this.router.navigate(['/dashboard']);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.isSubmitting = false;
+        this.errorMessage =
+          err?.error?.message ||
+          (err.status === 0
+            ? 'Cannot reach server. Please check your connection.'
+            : 'Invalid email or password. Please try again.');
+      },
+    });
   }
 
   goToRegister(): void {

@@ -133,23 +133,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
     )
   `);
 
-  // 2) Backfill columns for old DBs (safe no-op if already present)
-  (function ensureBillColumns() {
-    db.all(`PRAGMA table_info(bills)`, [], (err, cols) => {
-      if (err) { console.error('PRAGMA table_info(bills) failed:', err); return; }
+  // Backfill columns for users table (safe no-op if already present)
+  (function ensureUserColumns() {
+    db.all(`PRAGMA table_info(users)`, [], (err, cols) => {
+      if (err) { console.error('PRAGMA table_info(users) failed:', err); return; }
       const names = new Set(cols.map(c => c.name));
       const addCol = (sql) => db.run(sql, [], (e) => {
         if (e && !String(e.message || '').includes('duplicate column')) {
-          console.warn('ALTER TABLE failed:', e.message);
+          console.warn('ALTER TABLE users failed:', e.message);
         }
       });
 
-      if (!names.has('isPaid')) addCol(`ALTER TABLE bills ADD COLUMN isPaid INTEGER DEFAULT 0`);
-      if (!names.has('paidAt')) addCol(`ALTER TABLE bills ADD COLUMN paidAt TEXT`);
+      if (!names.has('email')) addCol(`ALTER TABLE users ADD COLUMN email TEXT`);
+      if (!names.has('authToken')) addCol(`ALTER TABLE users ADD COLUMN authToken TEXT`);
     });
-
-    // Unique index on billNumber (you already had this)
-    db.run(`CREATE UNIQUE INDEX IF NOT EXISTS uniq_bills_billNumber ON bills(billNumber)`);
   })();
 
   // Enable FK so items delete with job
@@ -949,6 +946,8 @@ app.get('/api/label-prints/product-totals', (req, res) => {
 });
 
 // ==================== AUTH ROUTES ====================
+const crypto = require('crypto');
+
 app.post('/api/register', (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ message: 'Email and password required' });
@@ -956,7 +955,7 @@ app.post('/api/register', (req, res) => {
   db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row) => {
     if (row) return res.status(400).json({ message: 'Email already exists' });
     const hashed = await bcrypt.hash(password, 10);
-    db.run('INSERT INTO users (email, password) VALUES (?, ?)', [email, hashed], err => {
+    db.run('INSERT INTO users (email, Username, password) VALUES (?, ?, ?)', [email, email, hashed], err => {
       if (err) return res.status(500).json({ message: 'Failed to register user' });
       res.status(201).json({ message: 'User registered' });
     });
@@ -966,10 +965,42 @@ app.post('/api/register', (req, res) => {
 app.post('/api/login', (req, res) => {
   const { email, password } = req.body;
   db.get('SELECT * FROM users WHERE email = ?', [email], async (err, row) => {
+    if (err) return res.status(500).json({ message: 'Database error' });
     if (!row || !(await bcrypt.compare(password, row.password))) {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
-    res.json({ message: 'Login successful' });
+
+    // Issue a fresh, random long-lived token (no built-in expiry —
+    // it stays valid until /api/logout clears it, per your request)
+    const token = crypto.randomBytes(32).toString('hex');
+
+    db.run('UPDATE users SET authToken = ? WHERE id = ?', [token, row.id], (updateErr) => {
+      if (updateErr) return res.status(500).json({ message: 'Failed to create session' });
+      res.json({ message: 'Login successful', token, email: row.email });
+    });
+  });
+});
+
+// Validate a stored token on app startup (auto-login)
+app.post('/api/session/validate', (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ valid: false, message: 'Missing token' });
+
+  db.get('SELECT id, email FROM users WHERE authToken = ?', [token], (err, row) => {
+    if (err) return res.status(500).json({ valid: false, message: 'Database error' });
+    if (!row) return res.status(401).json({ valid: false });
+    res.json({ valid: true, email: row.email });
+  });
+});
+
+// Logout — invalidates the token server-side so a copied token file is useless
+app.post('/api/logout', (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.json({ ok: true }); // nothing to clear
+
+  db.run('UPDATE users SET authToken = NULL WHERE authToken = ?', [token], (err) => {
+    if (err) return res.status(500).json({ ok: false, message: 'Failed to log out' });
+    res.json({ ok: true });
   });
 });
 
