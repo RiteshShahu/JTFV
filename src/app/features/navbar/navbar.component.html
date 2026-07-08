@@ -4,35 +4,29 @@
     <img src="assets/logo2.jpg" alt="Logo" class="logo-img" />
     <span class="app-title">JTFV Billing</span>
   </div>
-
   <!-- Navigation Links -->
   <div class="nav-links">
     <a mat-button routerLink="/dashboard">Home</a>
-
     <div class="menu-wrapper">
       <button mat-button [matMenuTriggerFor]="merchantsMenu">
         Merchants
         <mat-icon class="dropdown-icon">expand_more</mat-icon>
       </button>
     </div>
-
     <mat-menu #merchantsMenu="matMenu">
       <button mat-menu-item routerLink="/dashboard">Merchants Overview</button>
       <button mat-menu-item routerLink="/add-merchants">Add Merchants</button>
     </mat-menu>
-
     <div class="menu-wrapper">
       <button mat-button [matMenuTriggerFor]="productsMenu">
         Products
         <mat-icon class="dropdown-icon">expand_more</mat-icon>
       </button>
     </div>
-
     <mat-menu #productsMenu="matMenu">
       <button mat-menu-item routerLink="/products">Products</button>
       <button mat-menu-item routerLink="/add-products">Add Products</button>
     </mat-menu>
-
     <a mat-button routerLink="/bills">Bills</a>
     <a mat-button routerLink="/reliance-bills">Reliance Bills</a>
     <a mat-button routerLink="/add-lumpsum-bills">Add Lumpsum Bills</a>
@@ -41,12 +35,10 @@
     <a mat-button routerLink="/barcode">Reliance</a>
     <a mat-button routerLink="/dmart">D-Mart</a>
   </div>
-
   <!-- Spacer -->
   <span class="spacer"></span>
-
   <!-- Logout Button -->
-  <button mat-raised-button color="warn" (click)="logout()" class="logout-button">
-    Logout
+  <button mat-raised-button color="warn" (click)="logout()" [disabled]="isLoggingOut" class="logout-button">
+    {{ isLoggingOut ? 'Logging out…' : 'Logout' }}
   </button>
 </mat-toolbar>

@@ -4,6 +4,7 @@ import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 
 const API_BASE = (window as any).__APP_API__ || 'http://localhost:3001';
+const REMEMBERED_EMAIL_KEY = 'jtfv_rememberedEmail';
 
 @Component({
   selector: 'app-login',
@@ -27,6 +28,7 @@ export class LoginComponent implements OnInit {
     this.loginForm = this.formBuilder.group({
       email: ['', [Validators.required, Validators.email]],
       password: ['', [Validators.required, Validators.minLength(6)]],
+      rememberMe: [false],
     });
   }
 
@@ -36,6 +38,12 @@ export class LoginComponent implements OnInit {
     // 🧹 One-time cleanup: remove anything a previous version stored
     localStorage.removeItem('savedPassword');
     localStorage.removeItem('savedEmail');
+
+    // ✅ Pre-fill email if it was remembered (password is never stored)
+    const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+    if (savedEmail) {
+      this.loginForm.patchValue({ email: savedEmail, rememberMe: true });
+    }
 
     await this.tryAutoLogin();
   }
@@ -89,12 +97,19 @@ export class LoginComponent implements OnInit {
     this.errorMessage = null;
     this.isSubmitting = true;
 
-    const { email, password } = this.loginForm.value;
+    const { email, password, rememberMe } = this.loginForm.value;
 
     this.http.post<{ message: string; token: string }>(
       `${API_BASE}/api/login`, { email, password }
     ).subscribe({
       next: async (res) => {
+        // ✅ Remember (or forget) the email based on the checkbox
+        if (rememberMe) {
+          localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+        } else {
+          localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+        }
+
         const electron = (window as any).electron;
         if (electron?.auth?.saveToken && res.token) {
           await electron.auth.saveToken(res.token);

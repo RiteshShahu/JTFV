@@ -6,27 +6,32 @@
   background: linear-gradient(to right, #e0ecff, #f8f9fa);
   padding: 1rem;
 }
+
 .login-container {
   width: 100%;
   max-width: 420px;
 }
+
 .login-card {
   padding: 2rem;
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
+
 .login-card__header {
   display: flex;
   justify-content: center;
   align-items: center;
   margin-bottom: 1.5rem;
 }
+
 .login-card__logo-wrapper {
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
 }
+
 .login-card__logo {
   width: 96px;
   height: 96px;
@@ -34,23 +39,37 @@
   border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
 .login-card__content {
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
 }
+
 .login-input {
   font-size: 16px;
 }
+
 .full-width {
   width: 100%;
 }
+
 mat-form-field {
   width: 100%;
 }
+
 mat-error {
   font-size: 13px;
   color: #d32f2f;
+}
+
+.login-card__checking {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 2rem 0;
+  color: #546e7a;
 }
 
 /* NEW: inline server error banner */
@@ -65,10 +84,17 @@ mat-error {
 }
 
 /* NEW: remember-me row */
-.login-card__remember {
+.login-card__row {
   display: flex;
   align-items: center;
   margin-top: -0.5rem;
+}
+
+.login-card__hint {
+  font-size: 12.5px;
+  color: #78909c;
+  text-align: center;
+  margin: -0.4rem 0 0;
 }
 
 .login-card__actions {
@@ -76,6 +102,7 @@ mat-error {
   justify-content: center;
   margin-top: 1.5rem;
 }
+
 .login-card__actions button {
   width: 100%;
   font-size: 15px;
@@ -89,9 +116,11 @@ mat-error {
   justify-content: center;
   gap: 8px;
 }
+
 .login-card__actions button:hover {
   transform: translateY(-2px);
 }
+
 .login-card__actions button:disabled {
   opacity: 0.7;
   transform: none;
@@ -101,20 +130,4 @@ mat-error {
 /* NEW: spinner inside the button */
 .login-card__spinner ::ng-deep circle {
   stroke: #fff;
-}
-
-.login-card__checking {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 2rem 0;
-  color: #546e7a;
-}
-
-.login-card__hint {
-  font-size: 12.5px;
-  color: #78909c;
-  text-align: center;
-  margin: -0.4rem 0 0;
 }
