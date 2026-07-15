@@ -814,8 +814,10 @@ export class RelianceBillsComponent implements OnInit, OnDestroy {
       }));
 
     const payload: any = {
-      clientName: this.shipToName || this.clientName,
+      clientName: this.shipToName || this.clientName,   // ship-to drives Reports list + download
       address: this.shipToAddress || this.address,
+      shipToName: this.shipToName,                       // NEW: persist explicit ship-to
+      shipToAddress: this.shipToAddress,                 // NEW
       billNumber: targetNo,
       billDate: this.billDate || '',
       totalAmount: Number(this.totalAmount) || 0,

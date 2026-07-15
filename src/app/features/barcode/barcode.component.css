@@ -317,8 +317,8 @@ select.form-control:focus {
 }
 
 .col-actions {
-  width: 110px;
-  min-width: 110px;
+  width: 150px;
+  min-width: 150px;
 }
 
 /* Table Action Buttons */
@@ -326,38 +326,51 @@ select.form-control:focus {
   display: flex;
   gap: 8px;
   justify-content: center;
+  align-items: center;
 }
 
 .btn-icon {
-  padding: 6px 12px;
+  padding: 8px 14px;
   font-size: 13px;
-  font-weight: 600;
-  border-radius: 6px;
-  border: 1px solid #d5d9df;
-  background-color: #ffffff;
-  color: #434343;
+  font-weight: bold;
+  border-radius: 8px;
+  border: none;
+  color: #ffffff;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.btn-icon:hover:not(:disabled) {
+  transform: scale(1.05);
+  color: #ffffff;
+}
+
+.btn-icon:active:not(:disabled) {
+  transform: scale(0.98);
 }
 
 .btn-icon:disabled {
-  opacity: 0.5;
+  background-color: #cfd6dc;
+  color: #ffffff;
+  opacity: 0.7;
   cursor: not-allowed;
-  border-color: #e0e0e0;
-  color: #a0a0a0;
-  background-color: #f9fafb;
+  transform: none !important;
+}
+
+.btn-duplicate {
+  background-color: #607d8b;
 }
 
 .btn-duplicate:hover:not(:disabled) {
-  background-color: #e3f2fd;
-  border-color: #90caf9;
-  color: #1565c0;
+  background-color: #546e7a;
+}
+
+.btn-delete {
+  background-color: #e53935;
 }
 
 .btn-delete:hover:not(:disabled) {
-  background-color: #ffebee;
-  border-color: #ef9a9a;
-  color: #c62828;
+  background-color: #c62828;
 }
 
 /* Print Summary Card */

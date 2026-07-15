@@ -149,6 +149,20 @@ const db = new sqlite3.Database(dbPath, (err) => {
     });
   })();
 
+  (function ensureBillColumns() {
+    db.all(`PRAGMA table_info(bills)`, [], (err, cols) => {
+      if (err) { console.error('PRAGMA table_info(bills) failed:', err); return; }
+      const names = new Set(cols.map(c => c.name));
+      const addCol = (sql) => db.run(sql, [], (e) => {
+        if (e && !String(e.message || '').includes('duplicate column')) {
+          console.warn('ALTER TABLE bills failed:', e.message);
+        }
+      });
+      if (!names.has('shipToName')) addCol(`ALTER TABLE bills ADD COLUMN shipToName TEXT`);
+      if (!names.has('shipToAddress')) addCol(`ALTER TABLE bills ADD COLUMN shipToAddress TEXT`);
+    });
+  })();
+
   // Enable FK so items delete with job
   db.run(`PRAGMA foreign_keys = ON`);
 
@@ -392,17 +406,19 @@ app.post('/api/bills', (req, res) => {
 
   const query = `
     INSERT INTO bills (
-      clientName, address, billNumber, billDate,
+      clientName, address, shipToName, shipToAddress, billNumber, billDate,
       discount, discountAmount, totalAmount, finalAmount,
       description, billItems, billType,
       isPaid, paidAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
   const values = [
     b.clientName || '',
     b.address || '',
+    b.shipToName || '',
+    b.shipToAddress || '',
     b.billNumber,
-    b.billDate || new Date().toISOString().substring(0, 10), // YYYY-MM-DD
+    b.billDate || new Date().toISOString().substring(0, 10),
     b.discount ?? 0,
     b.discountAmount ?? null,
     b.totalAmount ?? 0,

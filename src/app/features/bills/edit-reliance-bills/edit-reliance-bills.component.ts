@@ -484,10 +484,17 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
       .get<any>(`http://localhost:3001/api/bills/${billNumber}`)
       .subscribe({
         next: (bill) => {
-          this.clientName = bill.clientName || '';
-          this.address = bill.address || '';
-          this.shipToName = bill.clientName || this.shipToName;
-          this.shipToAddress = bill.address || this.shipToAddress;
+          // Bill To is ALWAYS Reliance Retail Limited for reliance bills — never overwritten.
+          this.clientName = EditRelianceBillsComponent.RELIANCE_CLIENT;
+          this.address = EditRelianceBillsComponent.RELIANCE_ADDR;
+
+          // Ship To comes from the saved bill.
+          // Prefer explicit shipTo* columns; fall back to clientName/address for
+          // legacy rows where the ship-to party was stored in clientName/address.
+          this.shipToName =
+            bill.shipToName || bill.clientName || this.shipToName;
+          this.shipToAddress =
+            bill.shipToAddress || bill.address || this.shipToAddress;
 
           const matchedClient = this.clients.find(
             (c) =>
@@ -499,9 +506,7 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
             : null;
 
           this.billNumber = bill.billNumber || billNumber;
-          this.originalBillNumber = this.normalizeBillNumber(
-            this.billNumber
-          );
+          this.originalBillNumber = this.normalizeBillNumber(this.billNumber);
           this.billDate = bill.billDate || this.billDate;
           this.totalAmount = Number(bill.totalAmount ?? 0);
 
@@ -520,16 +525,12 @@ export class EditRelianceBillsComponent implements OnInit, OnDestroy {
           this.billItems = items.map((it: any) => {
             const pid = Number(it.productId ?? it.id ?? null);
             const qty = Number(it.quantity ?? 0);
-            const price = Number(
-              it.price ?? this.priceMap[pid] ?? 0
-            );
+            const price = Number(it.price ?? this.priceMap[pid] ?? 0);
             const total = Number(
               it.total ?? qty * price * EditRelianceBillsComponent.NET_FACTOR
             );
             const name = pid
-              ? this.namesWithUnitsMap[pid] ||
-              it.productName ||
-              '(Unknown)'
+              ? this.namesWithUnitsMap[pid] || it.productName || '(Unknown)'
               : '';
 
             return {

@@ -28,6 +28,20 @@ export class ReportsComponent implements OnInit {
   selectedBillsForEmail = new Set<string>();
   isSendingEmail = false;
 
+  /* ------------------------------------------------------------------
+     Reliance BILL TO is a FIXED constant and must NEVER change.
+     The stored bill.clientName / bill.address always hold the actual
+     customer (FRESHPIK SPECTRA POWAI, FRESHPIK BKC, etc.) => SHIP TO.
+     ------------------------------------------------------------------ */
+  private readonly RELIANCE_BILL_TO_NAME = 'Reliance Retail Limited';
+  private readonly RELIANCE_BILL_TO_ADDR =
+    'Reliance Corporate Park, Thane-Belapur Road, Ghansoli-400701, Navi Mumbai, Maharashtra';
+
+  // Fallbacks only used when a legacy bill has no stored customer/address.
+  private readonly DEFAULT_SHIP_TO_NAME = 'FRESHPIK SPECTRA POWAI';
+  private readonly DEFAULT_SHIP_TO_ADDR =
+    'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076';
+
   constructor(
     private billsService: BillsService,
     private router: Router,
@@ -161,6 +175,7 @@ export class ReportsComponent implements OnInit {
     // 2) Fallback on client name
     const name = (bill.clientName || '').toString().toLowerCase();
     if (name.includes('freshpik spectra powai')) return true;
+    if (name.includes('freshpik bkc')) return true;
 
     // 3) Heuristic fallback for legacy rows
     const items = Array.isArray(bill.billItems) ? bill.billItems : [];
@@ -340,22 +355,19 @@ export class ReportsComponent implements OnInit {
         }
       }
 
-      // FIX: Include ALL address fields separately - don't merge them
-      const payloadBase = {
-        billNumber: bill.billNumber,
-        billDate: bill.billDate,
-        clientName: bill.clientName,
-        address: bill.address,
-        shipToName: bill.shipToName || null,      // Added separately
-        shipToAddress: bill.shipToAddress || null,  // Added separately
-      };
-
       let html = '';
 
       // === Reliance Bills ===
       if (this.isRelianceBill(bill)) {
+        // BILL TO  -> always the fixed Reliance entity (never the customer)
+        // SHIP TO  -> the actual customer stored on the bill (Powai / BKC / etc.)
         const payload = {
-          ...payloadBase,
+          billNumber: bill.billNumber,
+          billDate: bill.billDate,
+          clientName: this.RELIANCE_BILL_TO_NAME,     // BILL TO (fixed)
+          address: this.RELIANCE_BILL_TO_ADDR,        // BILL TO (fixed)
+          shipToName: bill.clientName || this.DEFAULT_SHIP_TO_NAME,   // SHIP TO (customer)
+          shipToAddress: bill.address || this.DEFAULT_SHIP_TO_ADDR,   // SHIP TO (customer address)
           billItems: items.map((it: any) => ({
             productId: Number(it.productId ?? it.id ?? null),
             productName: String(it.productName ?? ''),
@@ -373,7 +385,10 @@ export class ReportsComponent implements OnInit {
       // === Lumpsum Bills ===
       else if (bill.description) {
         const payload = {
-          ...payloadBase,
+          billNumber: bill.billNumber,
+          billDate: bill.billDate,
+          clientName: bill.clientName,
+          address: bill.address,
           description: bill.description || '',
           amount: Number(bill.totalAmount ?? 0),
           discount: Number(bill.discount ?? 0),
@@ -452,7 +467,7 @@ export class ReportsComponent implements OnInit {
     const checkbox = event.target as HTMLInputElement;
     if (checkbox.checked) {
       // Select all Reliance bills
-      this.filteredBills.filter(b => this.isRelianceBill(b)).forEach(b => 
+      this.filteredBills.filter(b => this.isRelianceBill(b)).forEach(b =>
         this.selectedBillsForEmail.add(b.billNumber)
       );
     } else {
@@ -513,7 +528,7 @@ export class ReportsComponent implements OnInit {
         return;
       }
 
-      // Build HTML for each bill and collect client names
+      // Build HTML for each bill and collect client (ship-to) names
       const billHtmls: string[] = [];
       const billNumbers = relianceBills.map(b => b.billNumber);
       const uniqueClientNames = new Set<string>();
@@ -531,17 +546,20 @@ export class ReportsComponent implements OnInit {
           }
         }
 
-        // Collect unique client names for email
-        const clientName = bill.shipToName || bill.clientName || 'Customer';
-        uniqueClientNames.add(clientName);
+        // The actual customer is stored on the bill -> this is the SHIP TO party.
+        const shipToName = bill.clientName || this.DEFAULT_SHIP_TO_NAME;
+        const shipToAddress = bill.address || this.DEFAULT_SHIP_TO_ADDR;
+
+        // Collect unique customer names for the email body.
+        uniqueClientNames.add(shipToName);
 
         const payload = {
           billNumber: bill.billNumber,
           billDate: bill.billDate,
-          clientName: bill.clientName,
-          address: bill.address,
-          shipToName: bill.shipToName || 'FRESHPIK SPECTRA POWAI ( T5EP )',
-          shipToAddress: bill.shipToAddress || 'Spectra, 1st, Central Ave, Hiranandani Gardens, Powai, Mumbai, Maharashtra 400076',
+          clientName: this.RELIANCE_BILL_TO_NAME,   // BILL TO (fixed Reliance)
+          address: this.RELIANCE_BILL_TO_ADDR,      // BILL TO (fixed Reliance)
+          shipToName: shipToName,                   // SHIP TO (actual customer)
+          shipToAddress: shipToAddress,             // SHIP TO (customer address)
           billItems: items.map((it: any) => ({
             productId: Number(it.productId ?? it.id ?? null),
             productName: String(it.productName ?? ''),
@@ -558,7 +576,7 @@ export class ReportsComponent implements OnInit {
         billHtmls.push(html);
       }
 
-      // Build email body with all unique client names
+      // Build email body with all unique customer names
       const billNumbersText = billNumbers.join(' & ');
       const clientNamesArray = Array.from(uniqueClientNames);
       const clientNamesText = clientNamesArray.join(' and ');
